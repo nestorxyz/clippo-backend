@@ -1,11 +1,11 @@
+// Load environment variables FIRST
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
-
-// Load environment variables
-dotenv.config();
 
 // Import routes
 import authRoutes from './routes/auth.routes.js';

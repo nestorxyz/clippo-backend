@@ -11,27 +11,34 @@ const router = Router();
  * WhatsApp webhook verification
  */
 router.get('/whatsapp', (req: Request, res: Response) => {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+  try {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
 
-  if (mode && token) {
-    console.log('token', token);
-    console.log(
-      'process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN',
-      process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
-    );
+    console.log('WhatsApp webhook verification attempt:', {
+      mode,
+      token: token ? 'present' : 'missing',
+    });
+
+    if (!mode || !token) {
+      console.log('Missing mode or token in webhook verification');
+      return res.sendStatus(400);
+    }
+
     if (
       mode === 'subscribe' &&
       token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
     ) {
-      console.log('WEBHOOK_VERIFIED');
+      console.log('✅ WhatsApp webhook verified successfully');
       return res.status(200).send(challenge);
     } else {
+      console.log('❌ WhatsApp webhook verification failed - token mismatch');
       return res.sendStatus(403);
     }
-  } else {
-    return res.sendStatus(400);
+  } catch (error) {
+    console.error('Error in webhook verification:', error);
+    return res.sendStatus(500);
   }
 });
 

@@ -1,6 +1,5 @@
 // Load environment variables FIRST
 import dotenv from 'dotenv';
-dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -9,6 +8,8 @@ import morgan from 'morgan';
 // Import routes
 import authRoutes from './routes/auth.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
+
+dotenv.config();
 
 // Import middleware
 import { errorHandler } from './middleware/error.middleware.js';
@@ -44,6 +45,7 @@ app.get('/health', (_, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/webhook', webhookRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

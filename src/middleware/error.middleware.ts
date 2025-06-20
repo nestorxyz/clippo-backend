@@ -1,11 +1,16 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 
 export interface AppError extends Error {
   statusCode?: number;
   isOperational?: boolean;
 }
 
-export function errorHandler(err: AppError, req: Request, res: Response): void {
+export function errorHandler(
+  err: AppError,
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
 
@@ -18,6 +23,11 @@ export function errorHandler(err: AppError, req: Request, res: Response): void {
     params: req.params,
     query: req.query,
   });
+
+  // Check if response was already sent
+  if (res.headersSent) {
+    return next(err);
+  }
 
   res.status(statusCode).json({
     success: false,

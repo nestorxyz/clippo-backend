@@ -32,7 +32,7 @@ export class WhatsAppService {
         template: {
           name: 'otp',
           language: {
-            code: 'es',
+            code: 'en',
           },
           components: [
             {

@@ -35,45 +35,26 @@ export class AIService {
 
       const sessionId = sessionResult.data.sessionId;
 
-      // Store user message
-      const { error: messageError } = await retired-providerAdmin
-        .from('chat_messages')
-        .insert({
-          session_id: sessionId,
-          role: 'user',
-          parts: [{ text: request.message }],
-        });
-
-      if (messageError) throw messageError;
-
-      // Call retired-provider Edge Function (existing gemini-chat function)
+      // Call the existing gemini-chat Edge Function with service role and userId
       const { data, error } = await retired-providerAdmin.functions.invoke(
         'gemini-chat',
         {
           body: {
             message: request.message,
             sessionId: sessionId,
+            timeZone: 'UTC',
+            userId: request.userId, // Pass userId for service role access
           },
         }
       );
 
-      if (error) throw error;
+      if (error) {
+        console.error('Edge Function error:', error);
+        throw error;
+      }
 
       const aiReply =
         data?.reply || "I couldn't process your request. Please try again.";
-
-      // Store AI response
-      const { error: aiMessageError } = await retired-providerAdmin
-        .from('chat_messages')
-        .insert({
-          session_id: sessionId,
-          role: 'model',
-          parts: [{ text: aiReply }],
-        });
-
-      if (aiMessageError) {
-        console.error('Failed to store AI message:', aiMessageError);
-      }
 
       return {
         success: true,

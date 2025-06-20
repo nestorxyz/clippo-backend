@@ -30,9 +30,9 @@ export class WhatsAppService {
         to: phoneNumber,
         type: 'template',
         template: {
-          name: 'otp',
+          name: 'verify_code',
           language: {
-            code: 'en',
+            code: 'en_US',
           },
           components: [
             {

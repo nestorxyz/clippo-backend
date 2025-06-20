@@ -17,6 +17,12 @@ export interface ServiceResponse<T = any> {
   message?: string;
 }
 
+// Special consolidation response data
+export interface ConsolidationData {
+  requiresConsolidation: boolean;
+  whatsappAccountId: string;
+}
+
 // WhatsApp webhook types
 export interface WhatsAppWebhookBody {
   object: string;

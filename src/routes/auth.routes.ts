@@ -20,6 +20,12 @@ const verifyOtpSchema = z.object({
   otpCode: z.string().length(6),
 });
 
+const consolidateAccountSchema = z.object({
+  phoneNumber: z.string().min(10).max(15),
+  userId: z.string().uuid(),
+  whatsappAccountId: z.string().uuid(),
+});
+
 /**
  * Send OTP to web user for phone verification
  */
@@ -50,6 +56,8 @@ router.post(
       if (!otpResult.success || !otpResult.data) {
         return res.status(400).json(otpResult);
       }
+
+      console.log('OTP result:', otpResult);
 
       // Send OTP via WhatsApp
       const sendResult = await whatsappService.sendOTP(
@@ -144,6 +152,62 @@ router.post(
         success: false,
         error: 'Internal server error',
         message: 'Failed to verify OTP',
+      });
+    }
+  }
+);
+
+/**
+ * Consolidate WhatsApp account into Google account
+ */
+router.post(
+  '/consolidate-account',
+  authenticateToken,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      // Validate request body
+      const validatedData = consolidateAccountSchema.parse(req.body);
+
+      // Ensure the userId matches the authenticated user
+      if (req.user?.id !== validatedData.userId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized',
+          message: 'You can only consolidate your own account',
+        });
+      }
+
+      // Perform account consolidation
+      const consolidationResult = await userService.consolidateWhatsAppAccount(
+        validatedData.userId,
+        validatedData.whatsappAccountId,
+        validatedData.phoneNumber
+      );
+
+      if (!consolidationResult.success) {
+        return res.status(400).json(consolidationResult);
+      }
+
+      return res.json({
+        success: true,
+        data: consolidationResult.data,
+        message:
+          'Accounts consolidated successfully. Your WhatsApp data has been merged.',
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          success: false,
+          error: 'Validation error',
+          message: error.errors[0].message,
+        });
+      }
+
+      console.error('Account consolidation error:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+        message: 'Failed to consolidate accounts',
       });
     }
   }

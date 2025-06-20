@@ -26,6 +26,13 @@ router.get('/whatsapp', (req: Request, res: Response) => {
       return res.sendStatus(400);
     }
 
+    console.log(
+      'process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN',
+      process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
+    );
+
+    console.log('token', token);
+
     if (
       mode === 'subscribe' &&
       token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN

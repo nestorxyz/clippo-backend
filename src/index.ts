@@ -8,6 +8,7 @@ import morgan from 'morgan';
 // Import routes
 import authRoutes from './routes/auth.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
+import linksRoutes from './routes/links.routes.js';
 
 dotenv.config();
 
@@ -51,6 +52,7 @@ app.get('/health', (_, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/links', linksRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

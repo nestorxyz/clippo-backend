@@ -27,6 +27,9 @@ app.use(
       'http://localhost:8080',
       'http://localhost:3000',
       'http://localhost:5173',
+      'http://192.168.18.82:5173', // Your local IP
+      'http://192.168.18.82:3000', // Your local IP
+      'http://192.168.18.82:8080', // Your local IP
     ],
     credentials: true,
   })
@@ -68,8 +71,26 @@ app.use((_, res) => {
 
 // Start server
 app.listen(PORT, () => {
+  // Get local network IP
+  const os = require('os');
+  const networkInterfaces = os.networkInterfaces();
+  let localIP = 'localhost';
+
+  // Find the first non-internal IPv4 address
+  for (const name of Object.keys(networkInterfaces)) {
+    for (const net of networkInterfaces[name]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        localIP = net.address;
+        break;
+      }
+    }
+    if (localIP !== 'localhost') break;
+  }
+
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🌐 Local:    http://localhost:${PORT}`);
+  console.log(`🌐 Network:  http://${localIP}:${PORT}`);
   console.log(
     `🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`
   );

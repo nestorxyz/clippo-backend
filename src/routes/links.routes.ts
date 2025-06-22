@@ -5,12 +5,6 @@ import { AuthRequest } from '../types/index.js';
 
 const router = Router();
 
-interface QuickSaveLinkRequest {
-  url: string;
-  title?: string;
-  description?: string;
-}
-
 interface QuickSaveLinkResponse {
   success: boolean;
   data?: {

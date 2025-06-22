@@ -493,42 +493,95 @@ ${description ? `Provided Description: ${description}` : ''}
 
 Execute the two-step process to analyze and save this link with appropriate categorization.`;
 
-      // Start the conversation and get function calls
-      const result = await await genAI.models.generateContent({
-        model: modelName,
-        contents: userMessage,
-        config: {
-          systemInstruction: systemPrompt,
-          tools: [{ functionDeclarations: tools.functionDeclarations }],
+      // Initialize conversation contents
+      const contents: any[] = [
+        {
+          role: 'user',
+          parts: [{ text: userMessage }],
         },
-      });
-      const functionCalls = result.functionCalls;
+      ];
 
-      if (!functionCalls || functionCalls.length === 0) {
-        throw new Error('AI did not execute required function calls');
-      }
-
-      console.log('AI Function calls:', JSON.stringify(functionCalls, null, 2));
-
-      // Execute function calls
+      let continueConversation = true;
       let urlInfo: any = null;
       let linkResult: any = null;
+      let conversationStep = 0;
 
-      for (const fc of functionCalls) {
-        if (fc.name === 'get_url_info') {
-          urlInfo = await this.getUrlInfo(
-            fc.args?.url as string,
-            fc.args?.focus as string
-          );
-        } else if (fc.name === 'register_link') {
-          linkResult = await this.registerLink(userId, fc.args);
+      console.log('🚀 Starting AI conversation for link saving');
+      console.log('📝 User message:', userMessage);
+
+      // Sequential conversation loop (like edge function)
+      while (continueConversation && conversationStep < 5) {
+        conversationStep++;
+        console.log(
+          `\n🔄 Conversation step ${conversationStep} contents:`,
+          JSON.stringify(contents, null, 2)
+        );
+
+        const result = await genAI.models.generateContent({
+          model: modelName,
+          contents: contents,
+          config: {
+            systemInstruction: systemPrompt,
+            tools: [{ functionDeclarations: tools.functionDeclarations }],
+          },
+        });
+
+        console.log('🤖 AI Response received');
+        console.log('📞 Function calls:', result.functionCalls?.length || 0);
+
+        const functionCalls = result.functionCalls;
+
+        if (functionCalls && functionCalls.length > 0) {
+          // Add AI's function calls to conversation
+          const functionCallParts = functionCalls.map((fc) => ({
+            functionCall: fc,
+          }));
+          contents.push({ role: 'model', parts: functionCallParts });
+
+          // Execute function calls and collect responses
+          const functionResponseParts = [];
+          for (const fc of functionCalls) {
+            let functionResponse;
+            if (fc.name === 'get_url_info') {
+              urlInfo = await this.getUrlInfo(
+                fc.args?.url as string,
+                fc.args?.focus as string
+              );
+              functionResponse = urlInfo;
+            } else if (fc.name === 'register_link') {
+              linkResult = await this.registerLink(userId, fc.args);
+              functionResponse = linkResult;
+            } else {
+              console.log('❌ Unknown function:', fc.name);
+              functionResponse = { success: false, error: 'Unknown function' };
+            }
+
+            functionResponseParts.push({
+              functionResponse: { name: fc.name, response: functionResponse },
+            });
+          }
+
+          // Add function responses to conversation
+          contents.push({ role: 'function', parts: functionResponseParts });
+        } else {
+          console.log('🏁 No more function calls - ending conversation');
+          continueConversation = false;
+          if (result.text) {
+            console.log('💬 Final AI text response:', result.text);
+          }
         }
       }
 
+      console.log('\n📊 Final Results:');
+      console.log('🔍 URL Info available:', !!urlInfo);
+      console.log('💾 Link saved:', !!linkResult?.success);
+
       // If AI didn't follow the two-step process, handle it
       if (!urlInfo && !linkResult) {
+        console.log('⚠️ AI did not complete two-step process - using fallback');
         // Fallback: do the two-step process manually
         urlInfo = await this.getUrlInfo(url);
+        console.log('🔍 Fallback URL Info:', JSON.stringify(urlInfo, null, 2));
 
         // Create fallback registration data
         const fallbackData = {
@@ -543,26 +596,49 @@ Execute the two-step process to analyze and save this link with appropriate cate
           img_preview: urlInfo?.urlMetadata?.image || null,
         };
 
+        console.log(
+          '💾 Fallback registration data:',
+          JSON.stringify(fallbackData, null, 2)
+        );
         linkResult = await this.registerLink(userId, fallbackData);
+        console.log(
+          '💾 Fallback link result:',
+          JSON.stringify(linkResult, null, 2)
+        );
+      } else if (!linkResult) {
+        console.log(
+          '⚠️ URL info available but no link saved - this should not happen'
+        );
+        console.log('🔍 Available URL Info:', JSON.stringify(urlInfo, null, 2));
       }
 
       if (!linkResult || !linkResult.success) {
-        throw new Error('Failed to save link');
+        console.error('❌ Failed to save link');
+        console.error('📊 Link result:', JSON.stringify(linkResult, null, 2));
+        console.error('📊 URL info:', JSON.stringify(urlInfo, null, 2));
+        throw new Error(
+          `Failed to save link: ${linkResult?.error || 'Unknown error'}`
+        );
       }
+
+      console.log('✅ Link saved successfully!');
 
       // Get the saved link data to return
       const { data: savedLink, error: fetchError } = await retired-providerAdmin
         .from('links')
         .select(
           `
-          id,
-          title,
-          description,
-          sub_categories (
-            name,
-            categories (name)
-          )
-        `
+           id,
+           title,
+           description,
+           sub_categories (
+             name,
+             categories (name)
+           ),
+           link_tags (
+             tags (name)
+           )
+         `
         )
         .eq('id', linkResult.data.id)
         .single();
@@ -634,7 +710,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
       });
       const responseText = result.text || (ogMetadata as any).description || '';
 
-      return {
+      const finalResult = {
         success: true,
         summary: responseText || ogMetadata.description || '',
         urlMetadata: {
@@ -643,6 +719,8 @@ Execute the two-step process to analyze and save this link with appropriate cate
           image: ogMetadata.image || null,
         },
       };
+
+      return finalResult;
     } catch (error: any) {
       console.error('Error analyzing URL:', error);
       return {
@@ -698,6 +776,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
         .maybeSingle();
 
       if (!subCategory) {
+        console.log('🆕 Creating new subcategory:', sub_category_name);
         const { data: newSubCategory, error: newSubCatError } =
           await retired-providerAdmin
             .from('sub_categories')
@@ -711,7 +790,6 @@ Execute the two-step process to analyze and save this link with appropriate cate
         if (newSubCatError) throw newSubCatError;
         subCategory = newSubCategory;
       }
-
       // Create the link
       const { data: newLink, error: linkError } = await retired-providerAdmin
         .from('links')
@@ -724,11 +802,19 @@ Execute the two-step process to analyze and save this link with appropriate cate
           source,
           img_preview,
         })
-        .select('id')
+        .select(
+          'id, title, description, sub_categories (name, categories (name)), link_tags (tags (name))'
+        )
         .single();
 
-      if (linkError) return { success: false, error: linkError.message };
-      if (!newLink) return { success: false, error: 'Failed to create link.' };
+      if (linkError) {
+        console.error('❌ Link creation error:', linkError);
+        return { success: false, error: linkError.message };
+      }
+      if (!newLink) {
+        console.error('❌ No link data returned');
+        return { success: false, error: 'Failed to create link.' };
+      }
 
       // Handle tags if provided
       if (tags && Array.isArray(tags) && tags.length > 0) {
@@ -770,6 +856,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
         }
       }
 
+      console.log('🎉 Link registration completed successfully!');
       return { success: true, data: newLink };
     } catch (error: any) {
       console.error('Register link error:', error);

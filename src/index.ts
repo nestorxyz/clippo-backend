@@ -9,6 +9,7 @@ import morgan from 'morgan';
 import authRoutes from './routes/auth.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import linksRoutes from './routes/links.routes.js';
+import dashboardRoutes from './routes/dashboard.routes.js';
 
 dotenv.config();
 
@@ -56,6 +57,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/links', linksRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

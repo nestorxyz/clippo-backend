@@ -226,6 +226,22 @@ Respuesta:
 
 ---
 
+🟢 **Ejemplo 5 – evaluación de satisfacción**
+
+Estudiante: "Muchas gracias, me siento mucho mejor ahora. Me ayudaste a entender que no estoy solo."
+
+Respuesta y acción:
+
+> Me alegra mucho saber que te sientes mejor. En una escala del 1 al 5, ¿qué tan satisfecho/a te sientes con nuestra conversación? (1 = nada satisfecho, 5 = muy satisfecho)
+
+Estudiante: "Un 5, me ayudaste mucho"
+
+Acción: Usar herramienta SaveSatisfactionScore con:
+- score: 5
+- feedback_message: "me ayudaste mucho"
+
+---
+
 # **🚨 Escape Hatch**
 
 Si no entiendes lo que el estudiante dice, o se expresa de forma ambigua, responde con:
@@ -252,6 +268,23 @@ Si no entiendes lo que el estudiante dice, o se expresa de forma ambigua, respon
 - Una emoción principal por mensaje
 - No asumir cosas no dichas explícitamente
 - Espera una respuesta antes de seguir
+
+---
+
+# **📊 Evaluación de Satisfacción**
+
+Cuando detectes que la conversación ha llegado a una resolución o cierre natural, pregunta al estudiante sobre su satisfacción con la conversación. **Detecta automáticamente** señales de resolución como:
+
+- "Gracias", "me siento mejor", "me ayudaste mucho"
+- "Ya me siento más tranquilo/a", "me sirvió hablar"
+- "Entiendo mejor ahora", "me diste buenas ideas"
+- Frases que indican que el estudiante se siente mejor o más claro
+
+**Cuando detectes resolución, pregunta:**
+
+> Me alegra haberte acompañado hoy. En una escala del 1 al 5, ¿qué tan satisfecho/a te sientes con nuestra conversación? (1 = nada satisfecho, 5 = muy satisfecho)
+
+Luego usa la herramienta **SaveSatisfactionScore** con la calificación que proporcione el estudiante.
 
 ---
 
@@ -328,6 +361,24 @@ Si no tienes suficiente contexto para una respuesta empática y precisa, respond
       "type": "array",
       "items": { "type": "string" },
       "description": "Los temas mencionados relacionados con el riesgo."
+    }
+  }
+}\`\`\`
+
+### **3. SaveSatisfactionScore**
+
+\`\`\`
+{
+  "name": "SaveSatisfactionScore",
+  "description": "Guarda la calificación de satisfacción del estudiante al final de una conversación que ha llegado a resolución.",
+  "parameters": {
+    "score": {
+      "type": "integer",
+      "description": "Calificación de satisfacción del 1 al 5 proporcionada por el estudiante."
+    },
+    "feedback_message": {
+      "type": "string",
+      "description": "Mensaje de feedback adicional del estudiante, si lo proporciona."
     }
   }
 }\`\`\`
@@ -432,6 +483,27 @@ const tools: {
           'detected_emotions',
           'mentioned_topics',
         ],
+      },
+    },
+    {
+      name: 'SaveSatisfactionScore',
+      description:
+        'Guarda la calificación de satisfacción del estudiante al final de una conversación que ha llegado a resolución.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          score: {
+            type: Type.NUMBER,
+            description:
+              'Calificación de satisfacción del 1 al 5 proporcionada por el estudiante.',
+          },
+          feedback_message: {
+            type: Type.STRING,
+            description:
+              'Mensaje de feedback adicional del estudiante, si lo proporciona.',
+          },
+        },
+        required: ['score'],
       },
     },
   ],
@@ -608,6 +680,58 @@ ${mentioned_topics.map((topic: string) => `• ${topic}`).join('\n')}
   }
 }
 
+/**
+ * Save satisfaction score from student
+ */
+async function saveSatisfactionScore(
+  userId: string,
+  sessionId: string,
+  args: any
+): Promise<any> {
+  const { score, feedback_message } = args;
+
+  try {
+    // Validate score is within range
+    if (score < 1 || score > 5) {
+      return {
+        success: false,
+        error: 'La calificación debe estar entre 1 y 5',
+      };
+    }
+
+    // Save satisfaction score to database
+    const { data: newScore, error: scoreError } = await retired-providerAdmin
+      .from('satisfaction_scores')
+      .insert({
+        session_id: sessionId,
+        user_id: userId,
+        score: score,
+        feedback_message: feedback_message || null,
+      })
+      .select('id')
+      .single();
+
+    if (scoreError) {
+      return {
+        success: false,
+        error: scoreError.message,
+      };
+    }
+
+    return {
+      success: true,
+      score_id: newScore?.id,
+      message: 'Calificación guardada exitosamente',
+    };
+  } catch (error: any) {
+    console.error('Error saving satisfaction score:', error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
 export class SunquService {
   /**
    * Process chat message with Sunqu emotional support agent
@@ -719,6 +843,12 @@ export class SunquService {
               functionResponse = await registerCase(userId, sessionId, fc.args);
             } else if (fc.name === 'EscalateCase') {
               functionResponse = await escalateCase(userId, sessionId, fc.args);
+            } else if (fc.name === 'SaveSatisfactionScore') {
+              functionResponse = await saveSatisfactionScore(
+                userId,
+                sessionId,
+                fc.args
+              );
             } else {
               functionResponse = {
                 success: false,
@@ -782,6 +912,228 @@ export class SunquService {
         success: false,
         error: error.message,
         message: 'Failed to process Sunqu chat',
+      };
+    }
+  }
+
+  /**
+   * Get dashboard analytics data
+   */
+  async getDashboardAnalytics(): Promise<ServiceResponse<any>> {
+    try {
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const twentyEightDaysAgo = new Date(
+        now.getTime() - 28 * 24 * 60 * 60 * 1000
+      );
+      const fifteenDaysAgo = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+
+      // 1. Active students (last 30 days)
+      const { data: activeStudentsData, error: activeStudentsError } =
+        await retired-providerAdmin
+          .from('register_cases')
+          .select('user_id')
+          .gte('created_at', thirtyDaysAgo.toISOString());
+
+      if (activeStudentsError) throw activeStudentsError;
+
+      const activeStudents = new Set(
+        activeStudentsData.map((case_) => case_.user_id)
+      ).size;
+
+      // 2. Students with problems (last 28 days) - percentage with alert = true
+      const { data: allStudentsLast28Days, error: allStudentsError } =
+        await retired-providerAdmin
+          .from('register_cases')
+          .select('user_id, alert')
+          .gte('created_at', twentyEightDaysAgo.toISOString());
+
+      if (allStudentsError) throw allStudentsError;
+
+      const uniqueStudentsLast28Days = new Set(
+        allStudentsLast28Days.map((case_) => case_.user_id)
+      );
+      const studentsWithProblems = new Set(
+        allStudentsLast28Days
+          .filter((case_) => case_.alert)
+          .map((case_) => case_.user_id)
+      );
+
+      const problemsPercentage =
+        uniqueStudentsLast28Days.size > 0
+          ? Math.round(
+              (studentsWithProblems.size / uniqueStudentsLast28Days.size) * 100
+            )
+          : 0;
+
+      // 3. Chatbot satisfaction (average from satisfaction_scores)
+      const { data: satisfactionData } = await (retired-providerAdmin as any)
+        .from('satisfaction_scores')
+        .select('score')
+        .gte('created_at', thirtyDaysAgo.toISOString());
+
+      const chatbotSatisfaction =
+        satisfactionData && satisfactionData.length > 0
+          ? Math.round(
+              (satisfactionData.reduce(
+                (sum: number, s: any) => sum + s.score,
+                0
+              ) /
+                satisfactionData.length) *
+                10
+            ) / 10
+          : 4.2; // Default value for demo
+
+      // 4. Main problems (last 15 days)
+      const { data: problemsData, error: problemsError } = await retired-providerAdmin
+        .from('register_cases')
+        .select('mentioned_topics')
+        .gte('created_at', fifteenDaysAgo.toISOString())
+        .eq('usage_type', 'emocional');
+
+      if (problemsError) throw problemsError;
+
+      const topicCounts: { [key: string]: number } = {};
+      problemsData.forEach((case_) => {
+        if (case_.mentioned_topics && Array.isArray(case_.mentioned_topics)) {
+          case_.mentioned_topics.forEach((topic: any) => {
+            if (typeof topic === 'string') {
+              topicCounts[topic] = (topicCounts[topic] || 0) + 1;
+            }
+          });
+        }
+      });
+
+      const totalProblems = Object.values(topicCounts).reduce(
+        (sum, count) => sum + count,
+        0
+      );
+      const mainProblems = Object.entries(topicCounts)
+        .map(([topic, count]) => ({
+          name: topic,
+          percentage:
+            totalProblems > 0 ? Math.round((count / totalProblems) * 100) : 0,
+        }))
+        .sort((a, b) => b.percentage - a.percentage)
+        .slice(0, 3);
+
+      // 5. Main emotions (last 15 days)
+      const { data: emotionsData, error: emotionsError } = await retired-providerAdmin
+        .from('register_cases')
+        .select('detected_emotions')
+        .gte('created_at', fifteenDaysAgo.toISOString())
+        .eq('usage_type', 'emocional');
+
+      if (emotionsError) throw emotionsError;
+
+      const emotionCounts: { [key: string]: number } = {};
+      emotionsData.forEach((case_) => {
+        if (case_.detected_emotions && Array.isArray(case_.detected_emotions)) {
+          case_.detected_emotions.forEach((emotion: any) => {
+            if (typeof emotion === 'string') {
+              emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
+            }
+          });
+        }
+      });
+
+      const totalEmotions = Object.values(emotionCounts).reduce(
+        (sum, count) => sum + count,
+        0
+      );
+      const mainEmotions = Object.entries(emotionCounts)
+        .map(([emotion, count]) => ({
+          name: emotion,
+          percentage:
+            totalEmotions > 0 ? Math.round((count / totalEmotions) * 100) : 0,
+        }))
+        .sort((a, b) => b.percentage - a.percentage)
+        .slice(0, 3);
+
+      // 6. Reported learnings (last 15 days)
+      const { data: learningsData, error: learningsError } = await retired-providerAdmin
+        .from('register_cases')
+        .select('reported_learnings')
+        .gte('created_at', fifteenDaysAgo.toISOString())
+        .neq('reported_learnings', '[]')
+        .neq('reported_learnings', null);
+
+      if (learningsError) throw learningsError;
+
+      const learningCounts: { [key: string]: number } = {};
+      learningsData.forEach((case_) => {
+        if (
+          case_.reported_learnings &&
+          Array.isArray(case_.reported_learnings)
+        ) {
+          case_.reported_learnings.forEach((learning: any) => {
+            if (typeof learning === 'string') {
+              learningCounts[learning] = (learningCounts[learning] || 0) + 1;
+            }
+          });
+        }
+      });
+
+      const totalLearnings = Object.values(learningCounts).reduce(
+        (sum, count) => sum + count,
+        0
+      );
+      const reportedLearnings = Object.entries(learningCounts)
+        .map(([learning, count]) => ({
+          name: learning,
+          percentage:
+            totalLearnings > 0 ? Math.round((count / totalLearnings) * 100) : 0,
+        }))
+        .sort((a, b) => b.percentage - a.percentage)
+        .slice(0, 3);
+
+      // 7. Recommendations (static for demo)
+      const recommendations = [
+        {
+          id: 1,
+          title: 'Organizar sesiones grupales breves (20 min)',
+          description:
+            'de respiración consciente o técnicas de relajación durante las horas de tutoría, especialmente en semanas de exámenes.',
+          color: 'blue',
+        },
+        {
+          id: 2,
+          title: 'Coordinar reuniones de escucha activa',
+          description:
+            'con estudiantes que hayan reportado situaciones familiares complejas, brindando seguimiento personalizado.',
+          color: 'green',
+        },
+        {
+          id: 3,
+          title: 'Implementar espacios de tutoría emocional',
+          description:
+            'donde se compartan experiencias positivas de resiliencia entre pares, promoviendo la empatía y el sentido de comunidad.',
+          color: 'purple',
+        },
+      ];
+
+      return {
+        success: true,
+        data: {
+          summary: {
+            active_students: activeStudents,
+            students_with_problems_percentage: problemsPercentage,
+            chatbot_satisfaction: chatbotSatisfaction,
+            school_satisfaction: 3.9, // Mock data for demo
+          },
+          main_problems: mainProblems,
+          main_emotions: mainEmotions,
+          reported_learnings: reportedLearnings,
+          recommendations: recommendations,
+        },
+        message: 'Dashboard analytics retrieved successfully',
+      };
+    } catch (error: any) {
+      console.error('Dashboard analytics error:', error);
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to retrieve dashboard analytics',
       };
     }
   }

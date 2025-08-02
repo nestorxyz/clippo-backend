@@ -7,6 +7,190 @@ import { formatPhoneNumber } from '../utils/phone';
 
 const router = Router();
 
+// Message batching data structures
+interface MessageData {
+  messageId: string;
+  text: string;
+  phoneNumber: string;
+  userId: string;
+  timestamp: string;
+}
+
+const userMessageBatches = new Map<string, Array<MessageData>>();
+const userBatchTimers = new Map<string, NodeJS.Timeout>();
+const userProcessingLocks = new Map<string, Promise<void> | null>();
+
+/**
+ * Mark message as read and show typing indicator
+ */
+async function markMessageReadAndShowTyping(
+  phoneNumber: string,
+  messageId: string
+): Promise<void> {
+  try {
+    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+    if (!accessToken || !phoneNumberId) {
+      console.warn('Missing WhatsApp credentials for typing indicator');
+      return;
+    }
+
+    const payload = {
+      messaging_product: 'whatsapp',
+      status: 'read',
+      message_id: messageId,
+      typing_indicator: { type: 'text' },
+    };
+
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!response.ok) {
+      console.warn(
+        `Failed to mark message as read/show typing: ${response.status}`
+      );
+    }
+  } catch (error) {
+    // Fire-and-forget: log error but don't fail processing
+    console.error(
+      `Error marking message as read/showing typing for ${phoneNumber}:`,
+      error
+    );
+  }
+}
+
+/**
+ * Add message to batch and schedule processing
+ */
+async function addMessageToBatch(messageData: MessageData): Promise<void> {
+  const { phoneNumber } = messageData;
+
+  // Get existing batch or create new array
+  const currentBatch = userMessageBatches.get(phoneNumber) || [];
+
+  // Add message to batch
+  currentBatch.push(messageData);
+  userMessageBatches.set(phoneNumber, currentBatch);
+
+  // Schedule/reschedule batch processing
+  await scheduleBatchProcessing(phoneNumber);
+}
+
+/**
+ * Schedule batch processing with 5-second debouncing
+ */
+async function scheduleBatchProcessing(phoneNumber: string): Promise<void> {
+  // Cancel existing timer if any
+  const existingTimer = userBatchTimers.get(phoneNumber);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+
+  // Create new 5-second timer
+  const timer = setTimeout(async () => {
+    // Remove timer reference
+    userBatchTimers.delete(phoneNumber);
+
+    // Process the batch
+    await processUserMessageBatch(phoneNumber);
+  }, 5000); // 5 seconds
+
+  // Store timer reference
+  userBatchTimers.set(phoneNumber, timer);
+}
+
+/**
+ * Process batched messages for a user
+ */
+async function processUserMessageBatch(phoneNumber: string): Promise<void> {
+  // Check if already processing (simple lock mechanism)
+  if (userProcessingLocks.get(phoneNumber)) {
+    console.log(`User ${phoneNumber} already being processed, skipping`);
+    return;
+  }
+
+  // Create processing promise (acts as lock)
+  const processingPromise = (async () => {
+    try {
+      // Get and clear the batch
+      const messageBatch = userMessageBatches.get(phoneNumber) || [];
+      if (messageBatch.length === 0) {
+        return;
+      }
+
+      userMessageBatches.delete(phoneNumber);
+
+      console.log(
+        `Processing batch of ${messageBatch.length} messages for ${phoneNumber}`
+      );
+
+      // Mark last message as read + show typing indicator
+      const lastMessage = messageBatch[messageBatch.length - 1];
+      if (lastMessage.messageId) {
+        await markMessageReadAndShowTyping(phoneNumber, lastMessage.messageId);
+      }
+
+      // Combine all text content from batch
+      const combinedText = messageBatch
+        .map((msg) => msg.text)
+        .join('\n')
+        .trim();
+
+      // Process with AI using the last message's user data
+      const aiResult = await aiService.processWhatsAppMessage({
+        message: combinedText,
+        phoneNumber: phoneNumber,
+        userId: lastMessage.userId,
+      });
+
+      if (!aiResult.success || !aiResult.data) {
+        console.error('AI processing failed for batch:', aiResult.error);
+        await whatsappService.sendTextMessage(
+          phoneNumber,
+          "Sorry, I couldn't process your messages. Please try again."
+        );
+        return;
+      }
+
+      // Send AI response
+      const sendResult = await whatsappService.sendTextMessage(
+        phoneNumber,
+        aiResult.data.reply
+      );
+
+      if (!sendResult.success) {
+        console.error('Failed to send WhatsApp message:', sendResult.error);
+      }
+    } catch (error) {
+      console.error(`Error processing batch for ${phoneNumber}:`, error);
+      // Send error message to user
+      await whatsappService.sendTextMessage(
+        phoneNumber,
+        'I encountered an error processing your messages. Please try again.'
+      );
+    }
+  })();
+
+  // Set lock
+  userProcessingLocks.set(phoneNumber, processingPromise);
+
+  // Wait for processing to complete
+  await processingPromise;
+
+  // Remove lock
+  userProcessingLocks.delete(phoneNumber);
+}
+
 /**
  * WhatsApp webhook verification
  */
@@ -90,34 +274,17 @@ router.post(
 
               const user = userResult.data;
 
-              // Process message with AI
-              const aiResult = await aiService.processWhatsAppMessage({
-                message: messageText,
+              // Create message data for batching
+              const messageData: MessageData = {
+                messageId: message.id,
+                text: messageText,
                 phoneNumber: phoneNumber,
                 userId: user.id,
-              });
+                timestamp: message.timestamp,
+              };
 
-              if (!aiResult.success || !aiResult.data) {
-                console.error('AI processing failed:', aiResult.error);
-                await whatsappService.sendTextMessage(
-                  phoneNumber,
-                  "Sorry, I couldn't process your message. Please try again."
-                );
-                continue;
-              }
-
-              // Send AI response
-              const sendResult = await whatsappService.sendTextMessage(
-                phoneNumber,
-                aiResult.data.reply
-              );
-
-              if (!sendResult.success) {
-                console.error(
-                  'Failed to send WhatsApp message:',
-                  sendResult.error
-                );
-              }
+              // Add message to batch for processing
+              await addMessageToBatch(messageData);
             }
           }
         }

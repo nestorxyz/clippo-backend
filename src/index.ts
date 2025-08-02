@@ -25,6 +25,7 @@ app.use(
   cors({
     origin: [
       process.env.FRONTEND_URL || 'http://localhost:5173',
+      'https://sunqu.vercel.app',
       'http://localhost:8080',
       'http://localhost:3000',
       'http://localhost:5173',

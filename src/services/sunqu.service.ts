@@ -1476,7 +1476,7 @@ export class SunquService {
                 satisfactionData.length) *
                 10
             ) / 10
-          : 4.2; // Default value for demo
+          : 0; // Default value for demo
 
       // 4. Main problems (last 15 days)
       const { data: problemsData, error: problemsError } = await retired-providerAdmin
@@ -1628,6 +1628,163 @@ export class SunquService {
         success: false,
         error: error.message,
         message: 'Failed to retrieve dashboard analytics',
+      };
+    }
+  }
+
+  /**
+   * Generate AI-powered recommendations based on dashboard data
+   */
+  async generateRecommendations(data: {
+    summary: {
+      active_students: number;
+      students_with_problems_percentage: number;
+      chatbot_satisfaction: number;
+      school_satisfaction: number;
+    };
+    main_problems: Array<{ name: string; percentage: number }>;
+    main_emotions: Array<{ name: string; percentage: number }>;
+    reported_learnings: Array<{ name: string; percentage: number }>;
+  }): Promise<
+    ServiceResponse<{
+      recommendations: Array<{
+        id: number;
+        title: string;
+        description: string;
+        color: string;
+      }>;
+      generated_at: string;
+      context_summary: string;
+    }>
+  > {
+    try {
+      // Create context summary from the data
+      const contextSummary = `
+Datos del Dashboard:
+- Estudiantes activos: ${data.summary.active_students}
+- Estudiantes con problemas: ${data.summary.students_with_problems_percentage}%
+- Satisfacción con chatbot: ${data.summary.chatbot_satisfaction}/5
+- Satisfacción escolar: ${data.summary.school_satisfaction}/5
+
+Principales problemas identificados:
+${data.main_problems.map((p) => `- ${p.name}: ${p.percentage}%`).join('\n')}
+
+Principales emociones reportadas:
+${data.main_emotions.map((e) => `- ${e.name}: ${e.percentage}%`).join('\n')}
+
+Aprendizajes reportados:
+${data.reported_learnings
+  .map((l) => `- ${l.name}: ${l.percentage}%`)
+  .join('\n')}
+      `.trim();
+
+      // AI prompt for generating recommendations
+      const prompt = `
+Eres un experto en bienestar estudiantil y análisis educativo. Basándote en los siguientes datos de una escuela secundaria en Perú, genera exactamente 3 recomendaciones específicas, prácticas y contextualmente relevantes para mejorar el bienestar emocional de los estudiantes.
+
+${contextSummary}
+
+Instrucciones:
+1. Cada recomendación debe tener un título específico y una descripción detallada
+2. Las recomendaciones deben ser implementables en el contexto escolar peruano
+3. Enfócate en los problemas más prevalentes según los datos
+4. Considera las emociones reportadas para diseñar intervenciones apropiadas
+5. Asegúrate de que sean culturalmente apropiadas para estudiantes peruanos de secundaria
+
+Formato requerido - responde SOLO con un JSON válido:
+{
+  "recommendations": [
+    {
+      "id": 1,
+      "title": "Título corto de la recomendación",
+      "description": "Descripción detallada de la implementación",
+      "color": "blue"
+    },
+    {
+      "id": 2,
+      "title": "Título corto de la recomendación",
+      "description": "Descripción detallada de la implementación",
+      "color": "green"
+    },
+    {
+      "id": 3,
+      "title": "Título corto de la recomendación",
+      "description": "Descripción detallada de la implementación",
+      "color": "purple"
+    }
+  ]
+}
+
+Los colores deben ser uno de: blue, green, purple, orange, yellow, red, gray.
+`;
+
+      // Generate recommendations using Gemini AI
+      const result = await genAI.models.generateContent({
+        model: modelName,
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
+          },
+        ],
+        config: {
+          systemInstruction:
+            'Eres un experto en bienestar estudiantil y análisis educativo especializado en el contexto peruano.',
+        },
+      });
+
+      const responseText =
+        result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      // Parse the AI response
+      let aiRecommendations;
+      try {
+        aiRecommendations = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Failed to parse AI response:', responseText);
+        // Fallback to default recommendations if AI parsing fails
+        aiRecommendations = {
+          recommendations: [
+            {
+              id: 1,
+              title: 'Implementar círculos de diálogo emocional',
+              description:
+                'Establecer espacios semanales donde estudiantes puedan compartir sus experiencias emocionales en un ambiente seguro y estructurado.',
+              color: 'blue',
+            },
+            {
+              id: 2,
+              title: 'Programa de mentores estudiantiles',
+              description:
+                'Entrenar a estudiantes de grados superiores para acompañar emocionalmente a sus pares menores, fortaleciendo la red de apoyo escolar.',
+              color: 'green',
+            },
+            {
+              id: 3,
+              title: 'Talleres de gestión emocional',
+              description:
+                'Desarrollar actividades prácticas que enseñen técnicas de autorregulación emocional adaptadas a la cultura y contexto peruano.',
+              color: 'purple',
+            },
+          ],
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          recommendations: aiRecommendations.recommendations,
+          generated_at: new Date().toISOString(),
+          context_summary: contextSummary,
+        },
+        message: 'Recommendations generated successfully',
+      };
+    } catch (error: any) {
+      console.error('Generate recommendations error:', error);
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to generate recommendations',
       };
     }
   }

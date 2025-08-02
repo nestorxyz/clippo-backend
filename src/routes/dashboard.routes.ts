@@ -34,4 +34,51 @@ router.get('/analytics', async (_req, res) => {
   }
 });
 
+/**
+ * POST /dashboard/recommendations
+ * Generate AI-powered recommendations based on dashboard data
+ */
+router.post('/recommendations', async (req, res) => {
+  try {
+    const { summary, main_problems, main_emotions, reported_learnings } = req.body;
+
+    // Validate required fields
+    if (!summary || !main_problems || !main_emotions || !reported_learnings) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields',
+        message: 'All dashboard data fields are required to generate recommendations',
+      });
+    }
+
+    const result = await sunquService.generateRecommendations({
+      summary,
+      main_problems,
+      main_emotions,
+      reported_learnings,
+    });
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error,
+        message: result.message,
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: result.data,
+      message: result.message,
+    });
+  } catch (error: any) {
+    console.error('Dashboard recommendations route error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to generate recommendations',
+    });
+  }
+});
+
 export default router;

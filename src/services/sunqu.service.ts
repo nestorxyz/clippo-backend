@@ -1,6 +1,7 @@
 import { retired-providerAdmin } from '../config/retired-provider';
 import { ServiceResponse } from '../types';
 import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
+import { whatsappService } from './whatsapp.service';
 
 interface SunquChatRequest {
   message: string;
@@ -86,7 +87,13 @@ Si detectas una palabra clave de riesgo, responde con empatía y claridad. **No 
 
 > Lo que me estás contando es muy importante. No estás solo(a). Si tú quieres, puedo pedir que una persona calificada te brinde apoyo. Para eso, necesito compartir tu nombre y número de contacto. ¿Estarías de acuerdo?
 
-Solo si el estudiante acepta y envía su nombre, puedes proceder con la derivación. Hasta entonces, continúa ofreciendo contención emocional.
+Solo si el estudiante acepta y envía su nombre, puedes proceder con la derivación usando la herramienta **EscalateCase**. Hasta entonces, continúa ofreciendo contención emocional.
+
+**Cuando usar EscalateCase:**
+- El estudiante ha expresado palabras clave de riesgo (alerta = true)
+- El estudiante ha dado su consentimiento explícito
+- El estudiante ha proporcionado su nombre
+- Usa la herramienta EscalateCase con: nombre del estudiante, mensaje original de riesgo, emociones detectadas, y temas mencionados
 
 ---
 
@@ -191,7 +198,24 @@ Respuesta:
 
 ---
 
-🟡 **Ejemplo 3 – uso inapropiado**
+� **Ejemplo 3 – escalación cuando el estudiante da su nombre**
+
+Estudiante previo: "No quiero seguir viniendo al colegio, me pegan y me siento solo."
+Sunqu: "Lamento mucho que estés pasando por esto..."
+Estudiante: "Sí, acepto. Mi nombre es María."
+
+Acción: Usar herramienta EscalateCase con:
+- student_name: "María"  
+- original_risk_message: "No quiero seguir viniendo al colegio, me pegan y me siento solo."
+- detected_emotions: ["tristeza y soledad por maltrato"]
+- mentioned_topics: ["bullying", "violencia escolar"]
+
+Respuesta después de escalación exitosa:
+> Gracias María. He contactado a una persona calificada que se pondrá en contacto contigo pronto para brindarte el apoyo que necesitas. Mientras tanto, recuerda que no estás sola y que lo que estás viviendo no está bien.
+
+---
+
+�🟡 **Ejemplo 4 – uso inapropiado**
 
 Estudiante: "¿Me puedes pasar las respuestas del examen?"
 
@@ -279,6 +303,34 @@ Si no tienes suficiente contexto para una respuesta empática y precisa, respond
     }
   }
 }\`\`\`
+
+### **2. EscalateCase**
+
+\`\`\`
+{
+  "name": "EscalateCase",
+  "description": "Escala un caso de riesgo a personal calificado cuando el estudiante ha dado su consentimiento y proporcionado su nombre.",
+  "parameters": {
+    "student_name": {
+      "type": "string",
+      "description": "El nombre del estudiante que ha dado consentimiento para ser contactado."
+    },
+    "original_risk_message": {
+      "type": "string",
+      "description": "El mensaje original del estudiante que contiene las palabras clave de riesgo."
+    },
+    "detected_emotions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Las emociones detectadas en el caso de riesgo."
+    },
+    "mentioned_topics": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Los temas mencionados relacionados con el riesgo."
+    }
+  }
+}\`\`\`
 `;
 
 // Tools configuration for Gemini
@@ -342,6 +394,46 @@ const tools: {
         ],
       },
     },
+    {
+      name: 'EscalateCase',
+      description:
+        'Escala un caso de riesgo a personal calificado cuando el estudiante ha dado su consentimiento y proporcionado su nombre.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          student_name: {
+            type: Type.STRING,
+            description:
+              'El nombre del estudiante que ha dado consentimiento para ser contactado.',
+          },
+          original_risk_message: {
+            type: Type.STRING,
+            description:
+              'El mensaje original del estudiante que contiene las palabras clave de riesgo.',
+          },
+          detected_emotions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.STRING,
+            },
+            description: 'Las emociones detectadas en el caso de riesgo.',
+          },
+          mentioned_topics: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.STRING,
+            },
+            description: 'Los temas mencionados relacionados con el riesgo.',
+          },
+        },
+        required: [
+          'student_name',
+          'original_risk_message',
+          'detected_emotions',
+          'mentioned_topics',
+        ],
+      },
+    },
   ],
 };
 
@@ -391,6 +483,124 @@ async function registerCase(
     };
   } catch (error: any) {
     console.error('Error registering case:', error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+/**
+ * Escalate case to qualified personnel via WhatsApp
+ */
+async function escalateCase(
+  userId: string,
+  sessionId: string,
+  args: any
+): Promise<any> {
+  const {
+    student_name,
+    original_risk_message,
+    detected_emotions,
+    mentioned_topics,
+  } = args;
+
+  // Qualified personnel phone numbers
+  const qualifiedNumbers = ['+51989009435', '+51982463005', '+51944434709'];
+
+  try {
+    // Format current datetime in Lima timezone
+    const now = new Date();
+    const limaTime = new Intl.DateTimeFormat('es-PE', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone: 'America/Lima',
+    }).format(now);
+
+    // Create the alert message
+    const alertMessage = `🚨 ALERTA SUNQU - CASO DE RIESGO 🚨
+
+📋 INFORMACIÓN DEL CASO:
+• Estudiante: ${student_name}
+• Fecha: ${limaTime}
+• ID Sesión: ${sessionId}
+
+💬 MENSAJE ORIGINAL:
+"${original_risk_message}"
+
+🎯 EMOCIONES DETECTADAS:
+${detected_emotions.map((emotion: string) => `• ${emotion}`).join('\n')}
+
+📌 TEMAS MENCIONADOS:
+${mentioned_topics.map((topic: string) => `• ${topic}`).join('\n')}
+
+⚠️ Este estudiante requiere atención inmediata. Ha dado su consentimiento para ser contactado.
+
+- Sistema Sunqu`;
+
+    // Send message to all qualified personnel simultaneously
+    const sendPromises = qualifiedNumbers.map(async (phoneNumber) => {
+      try {
+        const result = await whatsappService.sendTextMessage(
+          phoneNumber,
+          alertMessage
+        );
+        return {
+          phoneNumber,
+          success: result.success,
+          error: result.success ? null : result.error,
+        };
+      } catch (error: any) {
+        return {
+          phoneNumber,
+          success: false,
+          error: error.message,
+        };
+      }
+    });
+
+    const results = await Promise.all(sendPromises);
+
+    // Check if at least one message was sent successfully
+    const successfulSends = results.filter((r) => r.success);
+    const failedSends = results.filter((r) => !r.success);
+
+    if (successfulSends.length === 0) {
+      return {
+        success: false,
+        error: 'No se pudo enviar la alerta a ningún personal calificado',
+        details: failedSends,
+      };
+    }
+
+    // Log the escalation in the dedicated escalated_cases table
+    await retired-providerAdmin.from('escalated_cases').insert({
+      session_id: sessionId,
+      user_id: userId,
+      student_name: student_name,
+      original_message: original_risk_message,
+      detected_emotions: detected_emotions,
+      mentioned_topics: mentioned_topics,
+      qualified_numbers_contacted: qualifiedNumbers,
+      successful_notifications: successfulSends.length,
+      failed_notifications: failedSends.length,
+      status: 'pending',
+    });
+
+    return {
+      success: true,
+      message: 'Caso escalado exitosamente',
+      notifications_sent: successfulSends.length,
+      notifications_failed: failedSends.length,
+      results: results,
+    };
+  } catch (error: any) {
+    console.error('Error escalating case:', error);
     return {
       success: false,
       error: error.message,
@@ -507,6 +717,8 @@ export class SunquService {
             let functionResponse;
             if (fc.name === 'RegisterCase') {
               functionResponse = await registerCase(userId, sessionId, fc.args);
+            } else if (fc.name === 'EscalateCase') {
+              functionResponse = await escalateCase(userId, sessionId, fc.args);
             } else {
               functionResponse = {
                 success: false,

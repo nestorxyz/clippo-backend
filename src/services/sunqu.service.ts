@@ -46,32 +46,47 @@ Ayudar a los estudiantes a expresar cómo se sienten, identificar posibles temas
 
 ---
 
-# 🚫 Límites de Uso
+# 🚫 Sistema de Advertencias por Uso Inapropiado
 
-Sunqu **no debe responder** a mensajes que contengan:
+Sunqu implementa un **sistema de 3 advertencias** para el uso inapropiado. **Siempre verifica el estado de advertencias del usuario antes de responder usando la herramienta CheckUserWarnings.**
 
+## Tipos de Uso Inapropiado:
 - Pedidos de ayuda con tareas o exámenes
 - Contenido sexual, erótico o insinuaciones
 - Bromas, lenguaje agresivo o inapropiado
 - Consultas ajenas al bienestar emocional
+- Intentos repetidos de desviar la conversación del propósito emocional
 
-Ante estos casos, responde con claridad y firmeza, pero sin juicio. **No continúes la conversación emocional hasta que el estudiante retome el propósito adecuado.**
+## Flujo de Advertencias:
 
-**Ejemplo de respuesta firme:**
+### Primera Advertencia (Warning 1):
+> Hola, estoy aquí para escucharte si estás pasando por algo difícil o necesitas hablar sobre cómo te sientes. Si necesitas ayuda con tareas o exámenes, lo mejor es hablar con un profesor. ¿Hay algo que te esté preocupando o te haga sentir mal últimamente?
 
-> Estoy aquí para escucharte si estás pasando por algo difícil o necesitas hablar sobre cómo te sientes. Si necesitas ayuda con otra cosa, lo mejor es hablar con un profesor o adulto de confianza.
+### Segunda Advertencia (Warning 2):
+> Te recuerdo que este espacio es para conversar sobre cómo te sientes emocionalmente. Si continúas con mensajes que no corresponden a este propósito, tendré que pausar nuestra conversación temporalmente. ¿Te gustaría contarme cómo has estado sintiéndote?
+
+### Tercera Advertencia (Warning 3):
+> Esta es mi última advertencia. Este chat es solo para apoyo emocional. Si tu próximo mensaje no es sobre cómo te sientes, tendré que pausar nuestras conversaciones por 2 horas. ¿Hay algo que te preocupe o te haga sentir triste, ansioso o enojado?
+
+### Aplicación de Sanción (Ban de 2 horas):
+> He pausado nuestras conversaciones por 2 horas porque has usado este espacio para propósitos diferentes al apoyo emocional. Puedes volver después de las [hora específica con fecha] si necesitas hablar sobre cómo te sientes. Recuerda que estoy aquí para escucharte cuando realmente lo necesites.
+
+**IMPORTANTE**: Después de cada advertencia, usa la herramienta **RecordWarning** para registrar la advertencia. Al llegar a la tercera advertencia consecutiva, usa la herramienta **ApplyBan** para aplicar la sanción de 2 horas.
 
 ---
 
-# 📋 Plan de Acción
+# 📋 Plan de Acción Actualizado
 
-1. Saluda de forma cálida y explícales que pueden expresarse con confianza.
-2. Pregunta cómo se sienten, con un tono seguro y acogedor.
-3. Si el estudiante lo permite, profundiza suavemente con preguntas abiertas.
-4. Valida lo que sienten, sin minimizar ni corregir.
-5. Si se detectan palabras de uso inapropiado, responde con el mensaje límite.
-6. Si se detectan palabras clave de riesgo (ver lista), responde con contención e informa que puedes ponerlos en contacto con una persona calificada, **solo si el estudiante está de acuerdo**.
-7. Cierra la conversación agradeciendo y dejando abierta la posibilidad de continuar.
+1. **SIEMPRE** verifica el estado del usuario con CheckUserWarnings antes de procesar cualquier mensaje
+2. Si el usuario está baneado, responde solo con el mensaje de ban y no proceses el contenido
+3. Si el mensaje es inapropiado:
+   - Incrementa las advertencias usando RecordWarning
+   - Responde según el nivel de advertencia correspondiente
+   - Si llega a 3 advertencias, aplica el ban con ApplyBan
+4. Si el mensaje es apropiado y emocional:
+   - Resetea las advertencias usando ResetWarnings (si tenía advertencias previas)
+   - Procede con el flujo emocional normal
+5. Continúa con el resto del protocolo emocional (detección de riesgo, contención, etc.)
 
 ---
 
@@ -161,6 +176,7 @@ Define si el mensaje fue parte de:
 - "emocional" → conversación válida
 - "inapropiado" → bromas, tareas, contenido sexual
 - "neutral" → no emocional pero no indebido
+- "advertencia" → mensaje que generó una advertencia
 
 ### **🔹 Campo:**
 
@@ -390,6 +406,87 @@ const tools: {
 } = {
   functionDeclarations: [
     {
+      name: 'CheckUserWarnings',
+      description:
+        'Verifica el estado actual de advertencias y ban del usuario antes de procesar cualquier mensaje.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          user_id: {
+            type: Type.STRING,
+            description: 'ID del usuario a verificar.',
+          },
+        },
+        required: ['user_id'],
+      },
+    },
+    {
+      name: 'RecordWarning',
+      description: 'Registra una nueva advertencia por uso inapropiado.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          user_id: {
+            type: Type.STRING,
+            description: 'ID del usuario que recibe la advertencia.',
+          },
+          warning_level: {
+            type: Type.NUMBER,
+            description: 'Nivel de advertencia (1, 2, o 3).',
+          },
+          inappropriate_message: {
+            type: Type.STRING,
+            description: 'El mensaje inapropiado que generó la advertencia.',
+          },
+          reason: {
+            type: Type.STRING,
+            description:
+              'Razón de la advertencia (tarea, contenido sexual, broma, etc.).',
+          },
+        },
+        required: [
+          'user_id',
+          'warning_level',
+          'inappropriate_message',
+          'reason',
+        ],
+      },
+    },
+    {
+      name: 'ApplyBan',
+      description:
+        'Aplica una sanción de 2 horas al usuario después de 3 advertencias.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          user_id: {
+            type: Type.STRING,
+            description: 'ID del usuario a sancionar.',
+          },
+          ban_reason: {
+            type: Type.STRING,
+            description: 'Razón del ban por uso inapropiado repetitivo.',
+          },
+        },
+        required: ['user_id', 'ban_reason'],
+      },
+    },
+    {
+      name: 'ResetWarnings',
+      description:
+        'Resetea las advertencias del usuario cuando regresa a un uso apropiado.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          user_id: {
+            type: Type.STRING,
+            description: 'ID del usuario cuyas advertencias se resetean.',
+          },
+        },
+        required: ['user_id'],
+      },
+    },
+    {
       name: 'RegisterCase',
       description:
         'Registra información clave de una conversación emocional con el estudiante, para ser mostrada en el panel de bienestar emocional.',
@@ -422,9 +519,9 @@ const tools: {
           },
           tipo_uso: {
             type: Type.STRING,
-            enum: ['emocional', 'inapropiado', 'neutral'],
+            enum: ['emocional', 'inapropiado', 'neutral', 'advertencia'],
             description:
-              'Clasifica si el mensaje fue parte de una conversación emocional válida, un uso inapropiado o neutral.',
+              'Clasifica si el mensaje fue parte de una conversación emocional válida, un uso inapropiado, neutral, o generó una advertencia.',
           },
           aprendizajes_reportados: {
             type: Type.ARRAY,
@@ -508,6 +605,236 @@ const tools: {
     },
   ],
 };
+
+/**
+ * Check user warnings and ban status
+ */
+async function checkUserWarnings(userId: string): Promise<any> {
+  try {
+    // Check if user is currently banned
+    const { data: activeBan, error: banError } = await (retired-providerAdmin as any)
+      .from('user_bans')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .gte('banned_until', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (banError) {
+      console.error('Error checking user ban status:', banError);
+      // Fail gracefully - continue with conversation
+      return {
+        success: true,
+        status: 'active',
+        current_warning_level: 0,
+        last_warning: null,
+      };
+    }
+
+    if (activeBan && activeBan.length > 0) {
+      return {
+        success: true,
+        status: 'banned',
+        ban_until: activeBan[0].banned_until,
+        ban_reason: activeBan[0].ban_reason,
+      };
+    }
+
+    // Check current warning level
+    const { data: activeWarnings, error: warningError } = await (
+      retired-providerAdmin as any
+    )
+      .from('user_warnings')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (warningError) {
+      console.error('Error checking user warnings:', warningError);
+      // Fail gracefully - continue with conversation
+      return {
+        success: true,
+        status: 'active',
+        current_warning_level: 0,
+        last_warning: null,
+      };
+    }
+
+    const currentWarningLevel =
+      activeWarnings && activeWarnings.length > 0
+        ? activeWarnings[0].warning_level
+        : 0;
+
+    return {
+      success: true,
+      status: 'active',
+      current_warning_level: currentWarningLevel,
+      last_warning:
+        activeWarnings && activeWarnings.length > 0 ? activeWarnings[0] : null,
+    };
+  } catch (error: any) {
+    console.error('Error checking user warnings:', error);
+    // Fail gracefully - continue with conversation
+    return {
+      success: true,
+      status: 'active',
+      current_warning_level: 0,
+      last_warning: null,
+    };
+  }
+}
+
+/**
+ * Record a warning for inappropriate usage
+ */
+async function recordWarning(
+  userId: string,
+  sessionId: string,
+  args: any
+): Promise<any> {
+  const { warning_level, inappropriate_message, reason } = args;
+
+  try {
+    // Deactivate previous warnings if this is a new sequence
+    if (warning_level === 1) {
+      await (retired-providerAdmin as any)
+        .from('user_warnings')
+        .update({ is_active: false })
+        .eq('user_id', userId)
+        .eq('is_active', true);
+    }
+
+    // Record new warning
+    const { data: newWarning, error: warningError } = await (
+      retired-providerAdmin as any
+    )
+      .from('user_warnings')
+      .insert({
+        user_id: userId,
+        session_id: sessionId,
+        warning_level: warning_level,
+        inappropriate_message: inappropriate_message,
+        reason: reason,
+      })
+      .select('id')
+      .single();
+
+    if (warningError) {
+      console.error('Error recording warning:', warningError);
+      return {
+        success: false,
+        error: warningError.message,
+      };
+    }
+
+    return {
+      success: true,
+      warning_id: newWarning?.id,
+      warning_level: warning_level,
+      message: `Warning ${warning_level} recorded successfully`,
+    };
+  } catch (error: any) {
+    console.error('Error recording warning:', error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+/**
+ * Apply 2-hour ban after 3 warnings
+ */
+async function applyBan(userId: string, args: any): Promise<any> {
+  const { ban_reason } = args;
+
+  try {
+    // Calculate ban end time (2 hours from now) in Lima timezone
+    const bannedUntil = new Date();
+    bannedUntil.setHours(bannedUntil.getHours() + 2);
+
+    // Deactivate any previous active bans
+    await (retired-providerAdmin as any)
+      .from('user_bans')
+      .update({ is_active: false })
+      .eq('user_id', userId)
+      .eq('is_active', true);
+
+    // Apply new ban
+    const { data: newBan, error: banError } = await (retired-providerAdmin as any)
+      .from('user_bans')
+      .insert({
+        user_id: userId,
+        ban_reason: ban_reason,
+        banned_until: bannedUntil.toISOString(),
+      })
+      .select('id, banned_until')
+      .single();
+
+    if (banError) {
+      console.error('Error applying ban:', banError);
+      return {
+        success: false,
+        error: banError.message,
+      };
+    }
+
+    // Deactivate current warnings as they've resulted in a ban
+    await (retired-providerAdmin as any)
+      .from('user_warnings')
+      .update({ is_active: false })
+      .eq('user_id', userId)
+      .eq('is_active', true);
+
+    return {
+      success: true,
+      ban_id: newBan?.id,
+      banned_until: newBan?.banned_until,
+      message: 'User banned for 2 hours successfully',
+    };
+  } catch (error: any) {
+    console.error('Error applying ban:', error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+/**
+ * Reset warnings when user returns to appropriate usage
+ */
+async function resetWarnings(userId: string): Promise<any> {
+  try {
+    const { error } = await (retired-providerAdmin as any)
+      .from('user_warnings')
+      .update({ is_active: false })
+      .eq('user_id', userId)
+      .eq('is_active', true);
+
+    if (error) {
+      console.error('Error resetting warnings:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: true,
+      message: 'User warnings reset successfully',
+    };
+  } catch (error: any) {
+    console.error('Error resetting warnings:', error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
 
 /**
  * Register case in database (adapted from Deno edge function)
@@ -734,6 +1061,73 @@ async function saveSatisfactionScore(
 
 export class SunquService {
   /**
+   * Format current datetime with timezone
+   */
+  private getCurrentDateTime(timeZone: string = 'UTC'): string {
+    const userTimeZone = timeZone || 'UTC';
+    const now = new Date();
+    const weekday = new Intl.DateTimeFormat('en-GB', {
+      weekday: 'long',
+      timeZone: userTimeZone,
+    }).format(now);
+    const day = new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric',
+      timeZone: userTimeZone,
+    }).format(now);
+    const month = new Intl.DateTimeFormat('en-GB', {
+      month: 'long',
+      timeZone: userTimeZone,
+    }).format(now);
+    const year = new Intl.DateTimeFormat('en-GB', {
+      year: 'numeric',
+      timeZone: userTimeZone,
+    }).format(now);
+    const time = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone: userTimeZone,
+    }).format(now);
+    return `${weekday}, ${day} ${month} ${year}, ${time} (${userTimeZone})`;
+  }
+
+  /**
+   * Format ban end time for display in Lima timezone with date
+   */
+  private formatBanEndTime(bannedUntil: string): string {
+    const bannedUntilDate = new Date(bannedUntil);
+    const today = new Date();
+
+    // Check if ban ends today or tomorrow
+    const isToday = bannedUntilDate.toDateString() === today.toDateString();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isTomorrow =
+      bannedUntilDate.toDateString() === tomorrow.toDateString();
+
+    const timeString = new Intl.DateTimeFormat('es-PE', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone: 'America/Lima',
+    }).format(bannedUntilDate);
+
+    if (isToday) {
+      return `las ${timeString} de hoy`;
+    } else if (isTomorrow) {
+      return `las ${timeString} de mañana`;
+    } else {
+      const dateString = new Intl.DateTimeFormat('es-PE', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'America/Lima',
+      }).format(bannedUntilDate);
+      return `las ${timeString} del ${dateString}`;
+    }
+  }
+
+  /**
    * Process chat message with Sunqu emotional support agent
    */
   async processSunquChat(
@@ -742,33 +1136,31 @@ export class SunquService {
     try {
       const { sessionId, message, timeZone = 'UTC', userId } = request;
 
-      // Format current datetime with timezone
-      const userTimeZone = timeZone || 'UTC';
-      const now = new Date();
-      const weekday = new Intl.DateTimeFormat('en-GB', {
-        weekday: 'long',
-        timeZone: userTimeZone,
-      }).format(now);
-      const day = new Intl.DateTimeFormat('en-GB', {
-        day: 'numeric',
-        timeZone: userTimeZone,
-      }).format(now);
-      const month = new Intl.DateTimeFormat('en-GB', {
-        month: 'long',
-        timeZone: userTimeZone,
-      }).format(now);
-      const year = new Intl.DateTimeFormat('en-GB', {
-        year: 'numeric',
-        timeZone: userTimeZone,
-      }).format(now);
-      const time = new Intl.DateTimeFormat('en-GB', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-        timeZone: userTimeZone,
-      }).format(now);
-      const current_datetime = `${weekday}, ${day} ${month} ${year}, ${time} (${userTimeZone})`;
+      // Step 1: Always check user warnings/ban status first
+      const userStatus = await checkUserWarnings(userId);
 
+      if (!userStatus.success) {
+        console.error(
+          'Failed to check user status, continuing with conversation'
+        );
+      }
+
+      // Step 2: If user is banned, return ban message only
+      if (userStatus.status === 'banned') {
+        const banEndTimeFormatted = this.formatBanEndTime(userStatus.ban_until);
+
+        return {
+          success: true,
+          data: {
+            reply: `He pausado nuestras conversaciones por 2 horas porque has usado este espacio para propósitos diferentes al apoyo emocional. Puedes volver después de ${banEndTimeFormatted} si necesitas hablar sobre cómo te sientes. Recuerda que estoy aquí para escucharte cuando realmente lo necesites.`,
+            functionCalls: [],
+          },
+          message: 'User is currently banned',
+        };
+      }
+
+      // Step 3: Continue with normal processing
+      const current_datetime = this.getCurrentDateTime(timeZone);
       const systemInstruction = systemPromptTemplate.replace(
         '{current_datetime}',
         current_datetime
@@ -839,7 +1231,21 @@ export class SunquService {
           const functionResponseParts = [];
           for (const fc of functionCalls) {
             let functionResponse;
-            if (fc.name === 'RegisterCase') {
+
+            // Handle new warning system functions
+            if (fc.name === 'CheckUserWarnings') {
+              functionResponse = await checkUserWarnings(userId);
+            } else if (fc.name === 'RecordWarning') {
+              functionResponse = await recordWarning(
+                userId,
+                sessionId,
+                fc.args
+              );
+            } else if (fc.name === 'ApplyBan') {
+              functionResponse = await applyBan(userId, fc.args);
+            } else if (fc.name === 'ResetWarnings') {
+              functionResponse = await resetWarnings(userId);
+            } else if (fc.name === 'RegisterCase') {
               functionResponse = await registerCase(userId, sessionId, fc.args);
             } else if (fc.name === 'EscalateCase') {
               functionResponse = await escalateCase(userId, sessionId, fc.args);

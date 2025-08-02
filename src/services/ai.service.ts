@@ -4,6 +4,7 @@ import { sessionManager } from '../utils/session';
 import { Tables } from '../types/retired-provider';
 import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
 import fetch from 'node-fetch';
+import { sunquService } from './sunqu.service';
 
 type ChatMessage = Tables<'chat_messages'>;
 
@@ -411,26 +412,22 @@ export class AIService {
 
       const sessionId = sessionResult.data.sessionId;
 
-      // Call the existing gemini-chat Edge Function with service role and userId
-      const { data, error } = await retired-providerAdmin.functions.invoke(
-        'gemini-chat',
-        {
-          body: {
-            message: request.message,
-            sessionId: sessionId,
-            timeZone: 'UTC',
-            userId: request.userId, // Pass userId for service role access
-          },
-        }
-      );
+      // Use local Sunqu service instead of edge function
+      const sunquResult = await sunquService.processSunquChat({
+        message: request.message,
+        sessionId: sessionId,
+        timeZone: 'UTC',
+        userId: request.userId,
+      });
 
-      if (error) {
-        console.error('Edge Function error:', error);
-        throw error;
+      if (!sunquResult.success || !sunquResult.data) {
+        console.error('Sunqu service error:', sunquResult.error);
+        throw new Error(sunquResult.error || 'Failed to process with Sunqu');
       }
 
       const aiReply =
-        data?.reply || "I couldn't process your request. Please try again.";
+        sunquResult.data.reply ||
+        "I couldn't process your request. Please try again.";
 
       return {
         success: true,

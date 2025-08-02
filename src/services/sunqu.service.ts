@@ -1,17 +1,30 @@
-import 'https://deno.land/x/xhr@0.1.0/mod.ts';
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@retired-provider/retired-provider-js@2';
-import { GoogleGenAI } from 'npm:@google/genai@latest';
-const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-const retired-provider_URL = Deno.env.get('retired-provider_URL');
-const retired-provider_ANON_KEY = Deno.env.get('retired-provider_ANON_KEY');
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
-};
-const genAI = new GoogleGenAI(GEMINI_API_KEY);
+import { retired-providerAdmin } from '../config/retired-provider';
+import { ServiceResponse } from '../types';
+import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
+
+interface SunquChatRequest {
+  message: string;
+  sessionId: string;
+  timeZone?: string;
+  userId: string;
+}
+
+interface SunquChatResponse {
+  reply: string;
+  functionCalls: any[];
+}
+
+// Initialize Gemini AI
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+if (!GEMINI_API_KEY) {
+  throw new Error('GEMINI_API_KEY environment variable is required');
+}
+
+const genAI = new GoogleGenAI({
+  apiKey: GEMINI_API_KEY,
+});
 const modelName = 'gemini-2.5-flash-preview-05-20';
+
 const systemPromptTemplate = `# 🧠 Rol del Modelo
 
 Eres **Sunqu**, un asistente de inteligencia artificial diseñado para conversar de forma empática, comprensiva y segura con estudiantes de secundaria en escuelas públicas del Perú. Tu propósito es brindar un espacio de escucha emocional, detectar posibles temas sensibles y ofrecer contención emocional básica, **sin emitir diagnósticos, resolver tareas escolares, ni responder a temas que no corresponden a este espacio**.
@@ -112,7 +125,7 @@ Incluye frases completas que expresen la emoción y su causa si está presente.
 - "Enojo porque sus padres no le prestan atención"
 - "Tristeza por haber perdido una persona cercana"
 
-Si no se detecta un motivo, puede usarse una emoción sola como "tristeza".
+Si no se detecta un motivo, puede usarse una emoción sola como "tristeza".
 
 ### **🔹 Campo:**
 
@@ -130,7 +143,7 @@ Temas subyacentes mencionados.
 
 ### **alerta**
 
-true si se detecta una palabra de riesgo.
+true si se detecta una palabra de riesgo.
 
 ### **🔹 Campo:**
 
@@ -138,9 +151,9 @@ true si se detecta una palabra de riesgo.
 
 Define si el mensaje fue parte de:
 
-- "emocional" → conversación válida
-- "inapropiado" → bromas, tareas, contenido sexual
-- "neutral" → no emocional pero no indebido
+- "emocional" → conversación válida
+- "inapropiado" → bromas, tareas, contenido sexual
+- "neutral" → no emocional pero no indebido
 
 ### **🔹 Campo:**
 
@@ -156,9 +169,9 @@ Solo se llena si el estudiante lo menciona explícitamente. Usa exactamente una 
 
 # **🧠 Ejemplos**
 
-🟢 **Ejemplo 1 – respuesta normal**
+🟢 **Ejemplo 1 – respuesta normal**
 
-Estudiante: “Estoy un poco triste hoy, no sé por qué.”
+Estudiante: "Estoy un poco triste hoy, no sé por qué."
 
 Respuesta:
 
@@ -167,9 +180,9 @@ Respuesta:
 
 ---
 
-🔴 **Ejemplo 2 – respuesta con alerta y consentimiento**
+🔴 **Ejemplo 2 – respuesta con alerta y consentimiento**
 
-Estudiante: “No quiero seguir viniendo al colegio, me pegan y me siento solo.”
+Estudiante: "No quiero seguir viniendo al colegio, me pegan y me siento solo."
 
 Respuesta:
 
@@ -178,9 +191,9 @@ Respuesta:
 
 ---
 
-🟡 **Ejemplo 3 – uso inapropiado**
+🟡 **Ejemplo 3 – uso inapropiado**
 
-Estudiante: “¿Me puedes pasar las respuestas del examen?”
+Estudiante: "¿Me puedes pasar las respuestas del examen?"
 
 Respuesta:
 
@@ -204,9 +217,9 @@ Si no entiendes lo que el estudiante dice, o se expresa de forma ambigua, respon
 - Evita consejos médicos, diagnósticos o soluciones rápidas
 - Nunca juzgues ni culpes
 - Usa frases como:
-    - “Lo que sientes es válido.”
-    - “Gracias por confiar en mí.”
-    - “No estás solo(a).”
+    - "Lo que sientes es válido."
+    - "Gracias por confiar en mí."
+    - "No estás solo(a)."
 
 ---
 
@@ -268,49 +281,52 @@ Si no tienes suficiente contexto para una respuesta empática y precisa, respond
 }\`\`\`
 `;
 
-const tools = {
+// Tools configuration for Gemini
+const tools: {
+  functionDeclarations: FunctionDeclaration[];
+} = {
   functionDeclarations: [
     {
       name: 'RegisterCase',
       description:
         'Registra información clave de una conversación emocional con el estudiante, para ser mostrada en el panel de bienestar emocional.',
       parameters: {
-        type: 'OBJECT',
+        type: Type.OBJECT,
         properties: {
           mensaje_original: {
-            type: 'STRING',
+            type: Type.STRING,
             description: 'El mensaje exacto que envió el estudiante.',
           },
           emociones_detectadas: {
-            type: 'ARRAY',
+            type: Type.ARRAY,
             items: {
-              type: 'STRING',
+              type: Type.STRING,
             },
             description:
               "Frases completas que describan la emoción principal y su causa si es conocida. Ej: 'Miedo porque se viene la semana de exámenes'.",
           },
           temas_mencionados: {
-            type: 'ARRAY',
+            type: Type.ARRAY,
             items: {
-              type: 'STRING',
+              type: Type.STRING,
             },
             description:
               "Temas identificados en el mensaje. Ej: 'ansiedad académica', 'problemas familiares', etc.",
           },
           alerta: {
-            type: 'BOOLEAN',
+            type: Type.BOOLEAN,
             description: 'Indica si se detectó una palabra clave de riesgo.',
           },
           tipo_uso: {
-            type: 'STRING',
+            type: Type.STRING,
             enum: ['emocional', 'inapropiado', 'neutral'],
             description:
               'Clasifica si el mensaje fue parte de una conversación emocional válida, un uso inapropiado o neutral.',
           },
           aprendizajes_reportados: {
-            type: 'ARRAY',
+            type: Type.ARRAY,
             items: {
-              type: 'STRING',
+              type: Type.STRING,
             },
             description:
               'Lista de frases de aprendizaje mencionadas por el estudiante, si corresponde.',
@@ -328,7 +344,15 @@ const tools = {
     },
   ],
 };
-async function registerCase(retired-provider, user_id, sessionId, args) {
+
+/**
+ * Register case in database (adapted from Deno edge function)
+ */
+async function registerCase(
+  userId: string,
+  sessionId: string,
+  args: any
+): Promise<any> {
   const {
     mensaje_original,
     emociones_detectadas,
@@ -338,267 +362,217 @@ async function registerCase(retired-provider, user_id, sessionId, args) {
     aprendizajes_reportados,
   } = args;
 
-  const { data: newCase, error: caseError } = await retired-provider
-    .from('register_cases')
-    .insert({
-      session_id: sessionId,
-      user_id: user_id,
-      original_message: mensaje_original,
-      detected_emotions: emociones_detectadas,
-      mentioned_topics: temas_mencionados,
-      alert: alerta,
-      usage_type: tipo_uso,
-      reported_learnings: aprendizajes_reportados,
-    })
-    .select('id')
-    .single();
+  try {
+    const { data: newCase, error: caseError } = await retired-providerAdmin
+      .from('register_cases')
+      .insert({
+        session_id: sessionId,
+        user_id: userId,
+        original_message: mensaje_original,
+        detected_emotions: emociones_detectadas,
+        mentioned_topics: temas_mencionados,
+        alert: alerta,
+        usage_type: tipo_uso,
+        reported_learnings: aprendizajes_reportados,
+      })
+      .select('id')
+      .single();
 
-  if (caseError) {
+    if (caseError) {
+      return {
+        success: false,
+        error: caseError.message,
+      };
+    }
+
+    return {
+      success: true,
+      case_id: newCase?.id,
+    };
+  } catch (error: any) {
+    console.error('Error registering case:', error);
     return {
       success: false,
-      error: caseError.message,
+      error: error.message,
     };
   }
-
-  return {
-    success: true,
-    case_id: newCase.id,
-  };
 }
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: corsHeaders,
-    });
-  }
-  try {
-    const { sessionId, message, timeZone, userId } = await req.json();
-    const authHeader = req.headers.get('Authorization');
-    const retired-provider = createClient(retired-provider_URL, retired-provider_ANON_KEY, {
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-      auth: {
-        persistSession: false,
-      },
-    });
-    let user;
-    let retired-providerClient = retired-provider;
-    // Check if this is a service role call (from WhatsApp backend)
-    const serviceRoleKey = Deno.env.get('retired-provider_SERVICE_ROLE_KEY');
-    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
-    // If userId is provided and it's a service role call (WhatsApp case)
-    if (userId && isServiceRole) {
-      // Create admin client for service role access
-      const retired-providerAdmin = createClient(retired-provider_URL, serviceRoleKey, {
-        auth: {
-          persistSession: false,
-        },
-      });
-      const { data: userData, error: userError } =
-        await retired-providerAdmin.auth.admin.getUserById(userId);
-      if (userError || !userData?.user) {
-        return new Response(
-          JSON.stringify({
-            error: 'User not found',
-          }),
+
+export class SunquService {
+  /**
+   * Process chat message with Sunqu emotional support agent
+   */
+  async processSunquChat(
+    request: SunquChatRequest
+  ): Promise<ServiceResponse<SunquChatResponse>> {
+    try {
+      const { sessionId, message, timeZone = 'UTC', userId } = request;
+
+      // Format current datetime with timezone
+      const userTimeZone = timeZone || 'UTC';
+      const now = new Date();
+      const weekday = new Intl.DateTimeFormat('en-GB', {
+        weekday: 'long',
+        timeZone: userTimeZone,
+      }).format(now);
+      const day = new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric',
+        timeZone: userTimeZone,
+      }).format(now);
+      const month = new Intl.DateTimeFormat('en-GB', {
+        month: 'long',
+        timeZone: userTimeZone,
+      }).format(now);
+      const year = new Intl.DateTimeFormat('en-GB', {
+        year: 'numeric',
+        timeZone: userTimeZone,
+      }).format(now);
+      const time = new Intl.DateTimeFormat('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+        timeZone: userTimeZone,
+      }).format(now);
+      const current_datetime = `${weekday}, ${day} ${month} ${year}, ${time} (${userTimeZone})`;
+
+      const systemInstruction = systemPromptTemplate.replace(
+        '{current_datetime}',
+        current_datetime
+      );
+
+      // Save user message to chat history
+      await retired-providerAdmin.from('chat_messages').insert({
+        session_id: sessionId,
+        role: 'user',
+        parts: [
           {
-            status: 404,
-            headers: {
-              ...corsHeaders,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-      }
-      user = userData.user;
-      // Use admin client for data operations
-      retired-providerClient = retired-providerAdmin;
-    } else {
-      // Regular web user authentication
-      const {
-        data: { user: webUser },
-      } = await retired-provider.auth.getUser();
-      if (!webUser) {
-        return new Response(
-          JSON.stringify({
-            error: 'Unauthorized',
-          }),
-          {
-            status: 401,
-            headers: {
-              ...corsHeaders,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-      }
-      user = webUser;
-    }
-
-    const userTimeZone = timeZone || 'UTC';
-    const now = new Date();
-    const weekday = new Intl.DateTimeFormat('en-GB', {
-      weekday: 'long',
-      timeZone: userTimeZone,
-    }).format(now);
-    const day = new Intl.DateTimeFormat('en-GB', {
-      day: 'numeric',
-      timeZone: userTimeZone,
-    }).format(now);
-    const month = new Intl.DateTimeFormat('en-GB', {
-      month: 'long',
-      timeZone: userTimeZone,
-    }).format(now);
-    const year = new Intl.DateTimeFormat('en-GB', {
-      year: 'numeric',
-      timeZone: userTimeZone,
-    }).format(now);
-    const time = new Intl.DateTimeFormat('en-GB', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-      timeZone: userTimeZone,
-    }).format(now);
-    const current_datetime = `${weekday}, ${day} ${month} ${year}, ${time} (${userTimeZone})`;
-
-    const systemInstruction = systemPromptTemplate.replace(
-      '{current_datetime}',
-      current_datetime
-    );
-
-    await retired-providerClient.from('chat_messages').insert({
-      session_id: sessionId,
-      role: 'user',
-      parts: [
-        {
-          text: message,
-        },
-      ],
-    });
-
-    const { data: historyData, error: historyError } = await retired-providerClient
-      .from('chat_messages')
-      .select('role, parts')
-      .eq('session_id', sessionId)
-      .order('created_at', {
-        ascending: true,
+            text: message,
+          },
+        ],
       });
-    if (historyError) throw historyError;
 
-    const contents = historyData.map((h) => ({
-      role: h.role,
-      parts: h.parts,
-    }));
+      // Get conversation history
+      const { data: historyData, error: historyError } = await retired-providerAdmin
+        .from('chat_messages')
+        .select('role, parts')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true });
 
-    let botReply = '';
-    const functionCallsForClient = [];
-    let continueConversation = true;
+      if (historyError) throw historyError;
 
-    while (continueConversation) {
-      const result = await genAI.models.generateContent({
-        model: modelName,
-        contents: contents,
-        config: {
-          systemInstruction,
-          tools: [
-            {
-              functionDeclarations: tools.functionDeclarations,
-            },
-          ],
-        },
-      });
-      const functionCalls = result.functionCalls;
-      if (functionCalls && functionCalls.length > 0) {
-        const functionCallParts = functionCalls.map((fc) => ({
-          functionCall: fc,
-        }));
-        await retired-providerClient.from('chat_messages').insert({
-          session_id: sessionId,
-          role: 'model',
-          parts: functionCallParts,
-        });
-        contents.push({
-          role: 'model',
-          parts: functionCallParts,
-        });
-        const functionResponseParts = [];
-        for (const fc of functionCalls) {
-          let functionResponse;
-          if (fc.name === 'RegisterCase') {
-            functionResponse = await registerCase(
-              retired-providerClient,
-              user.id,
-              sessionId,
-              fc.args
-            );
-          }
-          functionCallsForClient.push({
-            function: {
-              name: fc.name,
-              result: functionResponse,
-            },
-          });
-          functionResponseParts.push({
-            functionResponse: {
-              name: fc.name,
-              response: functionResponse,
-            },
-          });
-        }
-        await retired-providerClient.from('chat_messages').insert({
-          session_id: sessionId,
-          role: 'function',
-          parts: functionResponseParts,
-        });
-        contents.push({
-          role: 'function',
-          parts: functionResponseParts,
-        });
-      } else {
-        continueConversation = false;
-        if (result.text) {
-          botReply = result.text;
-          await retired-providerClient.from('chat_messages').insert({
-            session_id: sessionId,
-            role: 'model',
-            parts: [
+      const contents = historyData.map((h) => ({
+        role: h.role,
+        parts: Array.isArray(h.parts) ? h.parts : [h.parts],
+      })) as any[];
+
+      let botReply = '';
+      const functionCallsForClient: any[] = [];
+      let continueConversation = true;
+
+      // Conversation loop with function calling
+      while (continueConversation) {
+        const result = await genAI.models.generateContent({
+          model: modelName,
+          contents: contents,
+          config: {
+            systemInstruction,
+            tools: [
               {
-                text: botReply,
+                functionDeclarations: tools.functionDeclarations,
               },
             ],
+          },
+        });
+
+        const functionCalls = result.functionCalls;
+
+        if (functionCalls && functionCalls.length > 0) {
+          const functionCallParts = functionCalls.map((fc) => ({
+            functionCall: fc,
+          }));
+
+          await retired-providerAdmin.from('chat_messages').insert({
+            session_id: sessionId,
+            role: 'model',
+            parts: functionCallParts as any,
           });
+
+          contents.push({
+            role: 'model',
+            parts: functionCallParts,
+          });
+
+          const functionResponseParts = [];
+          for (const fc of functionCalls) {
+            let functionResponse;
+            if (fc.name === 'RegisterCase') {
+              functionResponse = await registerCase(userId, sessionId, fc.args);
+            } else {
+              functionResponse = {
+                success: false,
+                error: 'Unknown function',
+              };
+            }
+
+            functionCallsForClient.push({
+              function: {
+                name: fc.name,
+                result: functionResponse,
+              },
+            });
+
+            functionResponseParts.push({
+              functionResponse: {
+                name: fc.name,
+                response: functionResponse,
+              },
+            });
+          }
+
+          await retired-providerAdmin.from('chat_messages').insert({
+            session_id: sessionId,
+            role: 'function',
+            parts: functionResponseParts as any,
+          });
+
+          contents.push({
+            role: 'function',
+            parts: functionResponseParts,
+          });
+        } else {
+          continueConversation = false;
+          if (result.text) {
+            botReply = result.text;
+            await retired-providerAdmin.from('chat_messages').insert({
+              session_id: sessionId,
+              role: 'model',
+              parts: [
+                {
+                  text: botReply,
+                },
+              ],
+            });
+          }
         }
       }
-    }
-    return new Response(
-      JSON.stringify({
-        reply: botReply,
-        functionCalls: functionCallsForClient,
-      }),
-      {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
+
+      return {
+        success: true,
+        data: {
+          reply: botReply,
+          functionCalls: functionCallsForClient,
         },
-        status: 200,
-      }
-    );
-  } catch (error) {
-    console.error('Error in gemini-chat function:', error);
-    return new Response(
-      JSON.stringify({
+        message: 'Sunqu chat processed successfully',
+      };
+    } catch (error: any) {
+      console.error('Sunqu chat processing error:', error);
+      return {
+        success: false,
         error: error.message,
-      }),
-      {
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+        message: 'Failed to process Sunqu chat',
+      };
+    }
   }
-});
+}
+
+export const sunquService = new SunquService();

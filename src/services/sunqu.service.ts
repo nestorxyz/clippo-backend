@@ -2,6 +2,7 @@ import { retired-providerAdmin } from '../config/retired-provider';
 import { ServiceResponse } from '../types';
 import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
 import { whatsappService } from './whatsapp.service';
+import crypto from 'crypto';
 
 interface SunquChatRequest {
   message: string;
@@ -1581,30 +1582,41 @@ export class SunquService {
         .sort((a, b) => b.percentage - a.percentage)
         .slice(0, 3);
 
-      // 7. Recommendations (static for demo)
-      const recommendations = [
-        {
-          id: 1,
-          title: 'Organizar sesiones grupales breves (20 min)',
-          description:
-            'de respiración consciente o técnicas de relajación durante las horas de tutoría, especialmente en semanas de exámenes.',
-          color: 'blue',
+      // 7. Get the most recent recommendations for this data
+      const currentData = {
+        summary: {
+          active_students: activeStudents,
+          students_with_problems_percentage: problemsPercentage,
+          chatbot_satisfaction: chatbotSatisfaction,
+          school_satisfaction: 3.9,
         },
-        {
-          id: 2,
-          title: 'Coordinar reuniones de escucha activa',
-          description:
-            'con estudiantes que hayan reportado situaciones familiares complejas, brindando seguimiento personalizado.',
-          color: 'green',
-        },
-        {
-          id: 3,
-          title: 'Implementar espacios de tutoría emocional',
-          description:
-            'donde se compartan experiencias positivas de resiliencia entre pares, promoviendo la empatía y el sentido de comunidad.',
-          color: 'purple',
-        },
-      ];
+        main_problems: mainProblems,
+        main_emotions: mainEmotions,
+        reported_learnings: reportedLearnings,
+      };
+
+      // Create hash to check for existing recommendations
+      const inputHash = crypto
+        .createHash('sha256')
+        .update(JSON.stringify(currentData))
+        .digest('hex');
+
+      // Fetch the most recent recommendations for this exact data
+      const { data: existingRecommendations } = await retired-providerAdmin
+        .from('dashboard_recommendations')
+        .select('recommendations')
+        .eq('input_hash', inputHash)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      // Parse recommendations or use empty array
+      let recommendations = [];
+      if (existingRecommendations && existingRecommendations.recommendations) {
+        recommendations = Array.isArray(existingRecommendations.recommendations)
+          ? existingRecommendations.recommendations
+          : JSON.parse(existingRecommendations.recommendations as string);
+      }
 
       return {
         success: true,
@@ -1634,6 +1646,7 @@ export class SunquService {
 
   /**
    * Generate AI-powered recommendations based on dashboard data
+   * Saves to database and checks for existing recommendations
    */
   async generateRecommendations(data: {
     summary: {
@@ -1658,6 +1671,46 @@ export class SunquService {
     }>
   > {
     try {
+      // Create a hash of the input data to check for existing recommendations
+      const inputHash = crypto
+        .createHash('sha256')
+        .update(JSON.stringify(data))
+        .digest('hex');
+
+      // Check if we already have recommendations for this exact data
+      const { data: existingRecommendation, error: fetchError } =
+        await retired-providerAdmin
+          .from('dashboard_recommendations')
+          .select('*')
+          .eq('input_hash', inputHash)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+      if (!fetchError && existingRecommendation) {
+        console.log('Found existing recommendations for this data');
+
+        // Parse the recommendations from the database (stored as JSONB)
+        const dbRecommendations = Array.isArray(
+          existingRecommendation.recommendations
+        )
+          ? existingRecommendation.recommendations
+          : JSON.parse(existingRecommendation.recommendations as string);
+
+        return {
+          success: true,
+          data: {
+            recommendations: dbRecommendations,
+            generated_at:
+              (existingRecommendation.generated_at as string) ||
+              new Date().toISOString(),
+            context_summary:
+              (existingRecommendation.context_summary as string) || '',
+          },
+          message: 'Existing recommendations retrieved successfully',
+        };
+      }
+
       // Create context summary from the data
       const contextSummary = `
 Datos del Dashboard:
@@ -1770,14 +1823,35 @@ Los colores deben ser uno de: blue, green, purple, orange, yellow, red, gray.
         };
       }
 
+      const generatedAt = new Date().toISOString();
+
+      // Save recommendations to database
+      const { error: insertError } = await retired-providerAdmin
+        .from('dashboard_recommendations')
+        .insert({
+          context_summary: contextSummary,
+          dashboard_data: data,
+          recommendations: aiRecommendations.recommendations,
+          generated_at: generatedAt,
+          input_hash: inputHash,
+        });
+
+      if (insertError) {
+        console.error(
+          'Failed to save recommendations to database:',
+          insertError
+        );
+        // Don't fail the request if we can't save to DB, just log the error
+      }
+
       return {
         success: true,
         data: {
           recommendations: aiRecommendations.recommendations,
-          generated_at: new Date().toISOString(),
+          generated_at: generatedAt,
           context_summary: contextSummary,
         },
-        message: 'Recommendations generated successfully',
+        message: 'Recommendations generated and saved successfully',
       };
     } catch (error: any) {
       console.error('Generate recommendations error:', error);

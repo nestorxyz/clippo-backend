@@ -40,14 +40,16 @@ router.get('/analytics', async (_req, res) => {
  */
 router.post('/recommendations', async (req, res) => {
   try {
-    const { summary, main_problems, main_emotions, reported_learnings } = req.body;
+    const { summary, main_problems, main_emotions, reported_learnings } =
+      req.body;
 
     // Validate required fields
     if (!summary || !main_problems || !main_emotions || !reported_learnings) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields',
-        message: 'All dashboard data fields are required to generate recommendations',
+        message:
+          'All dashboard data fields are required to generate recommendations',
       });
     }
 

@@ -1924,9 +1924,7 @@ Los colores deben ser uno de: blue, green, purple, orange, yellow, red, gray.
   /**
    * Cluster similar problems using AI to group related issues and provide more meaningful insights
    */
-  async clusterProblems(data: {
-    main_problems: Array<{ name: string; percentage: number }>;
-  }): Promise<
+  async clusterProblems(): Promise<
     ServiceResponse<{
       clustered_problems: Array<{
         name: string;
@@ -1937,10 +1935,43 @@ Los colores deben ser uno de: blue, green, purple, orange, yellow, red, gray.
     }>
   > {
     try {
+      // Fetch ALL mentioned_topics from database (no date filters for clustering)
+      const { data: problemsData, error: problemsError } = await retired-providerAdmin
+        .from('register_cases')
+        .select('mentioned_topics')
+        .eq('usage_type', 'emocional');
+
+      if (problemsError) throw problemsError;
+
+      // Count all topics across all records
+      const topicCounts: { [key: string]: number } = {};
+      problemsData.forEach((case_) => {
+        if (case_.mentioned_topics && Array.isArray(case_.mentioned_topics)) {
+          case_.mentioned_topics.forEach((topic: any) => {
+            if (typeof topic === 'string') {
+              topicCounts[topic] = (topicCounts[topic] || 0) + 1;
+            }
+          });
+        }
+      });
+
+      // Convert to percentage-based format
+      const totalProblems = Object.values(topicCounts).reduce(
+        (sum, count) => sum + count,
+        0
+      );
+      const main_problems = Object.entries(topicCounts)
+        .map(([topic, count]) => ({
+          name: topic,
+          percentage:
+            totalProblems > 0 ? Math.round((count / totalProblems) * 100) : 0,
+        }))
+        .sort((a, b) => b.percentage - a.percentage);
+
       // Create a hash of the input data to check for existing clustering
       const inputHash = crypto
         .createHash('sha256')
-        .update(JSON.stringify(data.main_problems))
+        .update(JSON.stringify(main_problems))
         .digest('hex');
 
       // Check if we already have clustering for this exact data
@@ -1978,7 +2009,7 @@ Los colores deben ser uno de: blue, green, purple, orange, yellow, red, gray.
       }
 
       // AI prompt for clustering problems
-      const problemsList = data.main_problems
+      const problemsList = main_problems
         .map((p) => `"${p.name}" (${p.percentage}%)`)
         .join('\n');
 
@@ -2023,37 +2054,49 @@ Formato requerido - responde SOLO con un JSON válido:
         config: {
           systemInstruction:
             'Eres un experto en análisis de datos educativos especializado en el contexto peruano.',
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              clustered_problems: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: {
+                      type: Type.STRING,
+                    },
+                    percentage: {
+                      type: Type.NUMBER,
+                    },
+                    original_items: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.STRING,
+                      },
+                    },
+                  },
+                  required: ['name', 'percentage', 'original_items'],
+                },
+              },
+            },
+            required: ['clustered_problems'],
+          },
         },
       });
 
       const responseText =
         result.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-      // Parse the AI response
+      // Parse the AI response (should be clean JSON now)
       let aiClustering;
       try {
-        // Check if response is wrapped in markdown code blocks
-        let jsonText = responseText.trim();
-        if (jsonText.startsWith('```json')) {
-          // Extract JSON from markdown code block
-          const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/);
-          if (jsonMatch && jsonMatch[1]) {
-            jsonText = jsonMatch[1].trim();
-          }
-        } else if (jsonText.startsWith('```')) {
-          // Extract from generic code block
-          const jsonMatch = jsonText.match(/```\s*([\s\S]*?)\s*```/);
-          if (jsonMatch && jsonMatch[1]) {
-            jsonText = jsonMatch[1].trim();
-          }
-        }
-
-        aiClustering = JSON.parse(jsonText);
+        aiClustering = JSON.parse(responseText);
       } catch (parseError) {
         console.error('Failed to parse AI clustering response:', responseText);
         // Fallback to original data if AI parsing fails
         aiClustering = {
-          clustered_problems: data.main_problems.map((p) => ({
+          clustered_problems: main_problems.map((p) => ({
             name: p.name,
             percentage: p.percentage,
             original_items: [p.name],
@@ -2067,7 +2110,7 @@ Formato requerido - responde SOLO con un JSON válido:
       const { error: insertError } = await retired-providerAdmin
         .from('clustered_problems' as any)
         .insert({
-          original_problems: data.main_problems,
+          original_problems: main_problems,
           clustered_problems: aiClustering.clustered_problems,
           clustered_at: clusteredAt,
           input_hash: inputHash,
@@ -2102,9 +2145,7 @@ Formato requerido - responde SOLO con un JSON válido:
   /**
    * Cluster similar emotions using AI to group related emotional states and provide more meaningful insights
    */
-  async clusterEmotions(data: {
-    main_emotions: Array<{ name: string; percentage: number }>;
-  }): Promise<
+  async clusterEmotions(): Promise<
     ServiceResponse<{
       clustered_emotions: Array<{
         name: string;
@@ -2115,10 +2156,43 @@ Formato requerido - responde SOLO con un JSON válido:
     }>
   > {
     try {
+      // Fetch ALL detected_emotions from database (no date filters for clustering)
+      const { data: emotionsData, error: emotionsError } = await retired-providerAdmin
+        .from('register_cases')
+        .select('detected_emotions')
+        .eq('usage_type', 'emocional');
+
+      if (emotionsError) throw emotionsError;
+
+      // Count all emotions across all records
+      const emotionCounts: { [key: string]: number } = {};
+      emotionsData.forEach((case_) => {
+        if (case_.detected_emotions && Array.isArray(case_.detected_emotions)) {
+          case_.detected_emotions.forEach((emotion: any) => {
+            if (typeof emotion === 'string') {
+              emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
+            }
+          });
+        }
+      });
+
+      // Convert to percentage-based format
+      const totalEmotions = Object.values(emotionCounts).reduce(
+        (sum, count) => sum + count,
+        0
+      );
+      const main_emotions = Object.entries(emotionCounts)
+        .map(([emotion, count]) => ({
+          name: emotion,
+          percentage:
+            totalEmotions > 0 ? Math.round((count / totalEmotions) * 100) : 0,
+        }))
+        .sort((a, b) => b.percentage - a.percentage);
+
       // Create a hash of the input data to check for existing clustering
       const inputHash = crypto
         .createHash('sha256')
-        .update(JSON.stringify(data.main_emotions))
+        .update(JSON.stringify(main_emotions))
         .digest('hex');
 
       // Check if we already have clustering for this exact data
@@ -2156,7 +2230,7 @@ Formato requerido - responde SOLO con un JSON válido:
       }
 
       // AI prompt for clustering emotions
-      const emotionsList = data.main_emotions
+      const emotionsList = main_emotions
         .map((e) => `"${e.name}" (${e.percentage}%)`)
         .join('\n');
 
@@ -2208,13 +2282,41 @@ Formato requerido - responde SOLO con un JSON válido:
         config: {
           systemInstruction:
             'Eres un experto en psicología educativa especializado en el análisis emocional de adolescentes en el contexto peruano.',
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              clustered_emotions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: {
+                      type: Type.STRING,
+                    },
+                    percentage: {
+                      type: Type.NUMBER,
+                    },
+                    original_items: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.STRING,
+                      },
+                    },
+                  },
+                  required: ['name', 'percentage', 'original_items'],
+                },
+              },
+            },
+            required: ['clustered_emotions'],
+          },
         },
       });
 
       const responseText =
         result.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-      // Parse the AI response
+      // Parse the AI response (should be clean JSON now)
       let aiClustering;
       try {
         aiClustering = JSON.parse(responseText);
@@ -2222,7 +2324,7 @@ Formato requerido - responde SOLO con un JSON válido:
         console.error('Failed to parse AI clustering response:', responseText);
         // Fallback to original data if AI parsing fails
         aiClustering = {
-          clustered_emotions: data.main_emotions.map((e) => ({
+          clustered_emotions: main_emotions.map((e) => ({
             name: e.name,
             percentage: e.percentage,
             original_items: [e.name],
@@ -2236,7 +2338,7 @@ Formato requerido - responde SOLO con un JSON válido:
       const { error: insertError } = await retired-providerAdmin
         .from('clustered_emotions' as any)
         .insert({
-          original_emotions: data.main_emotions,
+          original_emotions: main_emotions,
           clustered_emotions: aiClustering.clustered_emotions,
           clustered_at: clusteredAt,
           input_hash: inputHash,

@@ -85,24 +85,11 @@ router.post('/recommendations', async (req, res) => {
 
 /**
  * POST /dashboard/cluster-problems
- * Cluster similar problems using AI to group related issues
+ * Cluster similar problems using AI to group related issues from all database records
  */
-router.post('/cluster-problems', async (req, res) => {
+router.post('/cluster-problems', async (_req, res) => {
   try {
-    const { main_problems } = req.body;
-
-    // Validate required fields
-    if (!main_problems || !Array.isArray(main_problems)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing or invalid main_problems field',
-        message: 'main_problems array is required to cluster problems',
-      });
-    }
-
-    const result = await sunquService.clusterProblems({
-      main_problems,
-    });
+    const result = await sunquService.clusterProblems();
 
     if (!result.success) {
       return res.status(500).json({
@@ -129,24 +116,11 @@ router.post('/cluster-problems', async (req, res) => {
 
 /**
  * POST /dashboard/cluster-emotions
- * Cluster similar emotions using AI to group related emotional states
+ * Cluster similar emotions using AI to group related emotional states from all database records
  */
-router.post('/cluster-emotions', async (req, res) => {
+router.post('/cluster-emotions', async (_req, res) => {
   try {
-    const { main_emotions } = req.body;
-
-    // Validate required fields
-    if (!main_emotions || !Array.isArray(main_emotions)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing or invalid main_emotions field',
-        message: 'main_emotions array is required to cluster emotions',
-      });
-    }
-
-    const result = await sunquService.clusterEmotions({
-      main_emotions,
-    });
+    const result = await sunquService.clusterEmotions();
 
     if (!result.success) {
       return res.status(500).json({

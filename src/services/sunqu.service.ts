@@ -1618,6 +1618,60 @@ export class SunquService {
           : JSON.parse(existingRecommendations.recommendations as string);
       }
 
+      // 8. Get the most recent clustering for problems
+      const problemsHash = crypto
+        .createHash('sha256')
+        .update(JSON.stringify(mainProblems))
+        .digest('hex');
+
+      const { data: existingProblemsCluster } = await retired-providerAdmin
+        .from('clustered_problems' as any)
+        .select('clustered_problems, clustered_at')
+        .eq('input_hash', problemsHash)
+        .order('clustered_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      let clusteredProblems = null;
+      let problemsClusteredAt = null;
+      if (existingProblemsCluster) {
+        clusteredProblems = Array.isArray(
+          (existingProblemsCluster as any).clustered_problems
+        )
+          ? (existingProblemsCluster as any).clustered_problems
+          : JSON.parse(
+              (existingProblemsCluster as any).clustered_problems as string
+            );
+        problemsClusteredAt = (existingProblemsCluster as any).clustered_at;
+      }
+
+      // 9. Get the most recent clustering for emotions
+      const emotionsHash = crypto
+        .createHash('sha256')
+        .update(JSON.stringify(mainEmotions))
+        .digest('hex');
+
+      const { data: existingEmotionsCluster } = await retired-providerAdmin
+        .from('clustered_emotions' as any)
+        .select('clustered_emotions, clustered_at')
+        .eq('input_hash', emotionsHash)
+        .order('clustered_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      let clusteredEmotions = null;
+      let emotionsClusteredAt = null;
+      if (existingEmotionsCluster) {
+        clusteredEmotions = Array.isArray(
+          (existingEmotionsCluster as any).clustered_emotions
+        )
+          ? (existingEmotionsCluster as any).clustered_emotions
+          : JSON.parse(
+              (existingEmotionsCluster as any).clustered_emotions as string
+            );
+        emotionsClusteredAt = (existingEmotionsCluster as any).clustered_at;
+      }
+
       return {
         success: true,
         data: {
@@ -1631,6 +1685,10 @@ export class SunquService {
           main_emotions: mainEmotions,
           reported_learnings: reportedLearnings,
           recommendations: recommendations,
+          clustered_problems: clusteredProblems,
+          clustered_emotions: clusteredEmotions,
+          problems_clustered_at: problemsClusteredAt,
+          emotions_clustered_at: emotionsClusteredAt,
         },
         message: 'Dashboard analytics retrieved successfully',
       };
@@ -1859,6 +1917,353 @@ Los colores deben ser uno de: blue, green, purple, orange, yellow, red, gray.
         success: false,
         error: error.message,
         message: 'Failed to generate recommendations',
+      };
+    }
+  }
+
+  /**
+   * Cluster similar problems using AI to group related issues and provide more meaningful insights
+   */
+  async clusterProblems(data: {
+    main_problems: Array<{ name: string; percentage: number }>;
+  }): Promise<
+    ServiceResponse<{
+      clustered_problems: Array<{
+        name: string;
+        percentage: number;
+        original_items: string[];
+      }>;
+      clustered_at: string;
+    }>
+  > {
+    try {
+      // Create a hash of the input data to check for existing clustering
+      const inputHash = crypto
+        .createHash('sha256')
+        .update(JSON.stringify(data.main_problems))
+        .digest('hex');
+
+      // Check if we already have clustering for this exact data
+      const { data: existingClustering, error: fetchError } =
+        await retired-providerAdmin
+          .from('clustered_problems' as any)
+          .select('*')
+          .eq('input_hash', inputHash)
+          .order('clustered_at', { ascending: false })
+          .limit(1)
+          .single();
+
+      if (!fetchError && existingClustering) {
+        console.log('Found existing problem clustering for this data');
+
+        // Parse the clustered problems from the database (stored as JSONB)
+        const dbClusteredProblems = Array.isArray(
+          (existingClustering as any).clustered_problems
+        )
+          ? (existingClustering as any).clustered_problems
+          : JSON.parse(
+              (existingClustering as any).clustered_problems as string
+            );
+
+        return {
+          success: true,
+          data: {
+            clustered_problems: dbClusteredProblems,
+            clustered_at:
+              ((existingClustering as any).clustered_at as string) ||
+              new Date().toISOString(),
+          },
+          message: 'Existing problem clustering retrieved successfully',
+        };
+      }
+
+      // AI prompt for clustering problems
+      const problemsList = data.main_problems
+        .map((p) => `"${p.name}" (${p.percentage}%)`)
+        .join('\n');
+
+      const prompt = `
+Eres un experto en análisis de datos educativos y bienestar estudiantil. Te proporciono una lista de problemas reportados por estudiantes de secundaria en Perú, cada uno con su porcentaje de incidencia.
+
+Tu tarea es agrupar problemas similares o relacionados en categorías más amplias y significativas. Esto ayudará a los educadores a tener una visión más clara de las principales áreas problemáticas.
+
+Lista de problemas originales:
+${problemsList}
+
+Instrucciones:
+1. Agrupa problemas similares o relacionados temáticamente
+2. Crea nombres descriptivos y claros para cada grupo
+3. Suma los porcentajes de los problemas agrupados
+4. Mantén la lista de elementos originales que forman cada grupo
+5. Si un problema es único y no se puede agrupar, manténlo como está
+6. Enfócate en crear entre 3-5 grupos principales
+7. Los nombres de los grupos deben ser profesionales y comprensibles para educadores
+
+Formato requerido - responde SOLO con un JSON válido:
+{
+  "clustered_problems": [
+    {
+      "name": "Nombre descriptivo del grupo de problemas",
+      "percentage": suma_de_porcentajes_agrupados,
+      "original_items": ["problema original 1", "problema original 2", ...]
+    }
+  ]
+}
+`;
+
+      // Generate clustering using Gemini AI
+      const result = await genAI.models.generateContent({
+        model: modelName,
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
+          },
+        ],
+        config: {
+          systemInstruction:
+            'Eres un experto en análisis de datos educativos especializado en el contexto peruano.',
+        },
+      });
+
+      const responseText =
+        result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      // Parse the AI response
+      let aiClustering;
+      try {
+        // Check if response is wrapped in markdown code blocks
+        let jsonText = responseText.trim();
+        if (jsonText.startsWith('```json')) {
+          // Extract JSON from markdown code block
+          const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/);
+          if (jsonMatch && jsonMatch[1]) {
+            jsonText = jsonMatch[1].trim();
+          }
+        } else if (jsonText.startsWith('```')) {
+          // Extract from generic code block
+          const jsonMatch = jsonText.match(/```\s*([\s\S]*?)\s*```/);
+          if (jsonMatch && jsonMatch[1]) {
+            jsonText = jsonMatch[1].trim();
+          }
+        }
+
+        aiClustering = JSON.parse(jsonText);
+      } catch (parseError) {
+        console.error('Failed to parse AI clustering response:', responseText);
+        // Fallback to original data if AI parsing fails
+        aiClustering = {
+          clustered_problems: data.main_problems.map((p) => ({
+            name: p.name,
+            percentage: p.percentage,
+            original_items: [p.name],
+          })),
+        };
+      }
+
+      const clusteredAt = new Date().toISOString();
+
+      // Save clustering to database
+      const { error: insertError } = await retired-providerAdmin
+        .from('clustered_problems' as any)
+        .insert({
+          original_problems: data.main_problems,
+          clustered_problems: aiClustering.clustered_problems,
+          clustered_at: clusteredAt,
+          input_hash: inputHash,
+        } as any);
+
+      if (insertError) {
+        console.error(
+          'Failed to save problem clustering to database:',
+          insertError
+        );
+        // Don't fail the request if we can't save to DB, just log the error
+      }
+
+      return {
+        success: true,
+        data: {
+          clustered_problems: aiClustering.clustered_problems,
+          clustered_at: clusteredAt,
+        },
+        message: 'Problems clustered and saved successfully',
+      };
+    } catch (error: any) {
+      console.error('Cluster problems error:', error);
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to cluster problems',
+      };
+    }
+  }
+
+  /**
+   * Cluster similar emotions using AI to group related emotional states and provide more meaningful insights
+   */
+  async clusterEmotions(data: {
+    main_emotions: Array<{ name: string; percentage: number }>;
+  }): Promise<
+    ServiceResponse<{
+      clustered_emotions: Array<{
+        name: string;
+        percentage: number;
+        original_items: string[];
+      }>;
+      clustered_at: string;
+    }>
+  > {
+    try {
+      // Create a hash of the input data to check for existing clustering
+      const inputHash = crypto
+        .createHash('sha256')
+        .update(JSON.stringify(data.main_emotions))
+        .digest('hex');
+
+      // Check if we already have clustering for this exact data
+      const { data: existingClustering, error: fetchError } =
+        await retired-providerAdmin
+          .from('clustered_emotions' as any)
+          .select('*')
+          .eq('input_hash', inputHash)
+          .order('clustered_at', { ascending: false })
+          .limit(1)
+          .single();
+
+      if (!fetchError && existingClustering) {
+        console.log('Found existing emotion clustering for this data');
+
+        // Parse the clustered emotions from the database (stored as JSONB)
+        const dbClusteredEmotions = Array.isArray(
+          (existingClustering as any).clustered_emotions
+        )
+          ? (existingClustering as any).clustered_emotions
+          : JSON.parse(
+              (existingClustering as any).clustered_emotions as string
+            );
+
+        return {
+          success: true,
+          data: {
+            clustered_emotions: dbClusteredEmotions,
+            clustered_at:
+              ((existingClustering as any).clustered_at as string) ||
+              new Date().toISOString(),
+          },
+          message: 'Existing emotion clustering retrieved successfully',
+        };
+      }
+
+      // AI prompt for clustering emotions
+      const emotionsList = data.main_emotions
+        .map((e) => `"${e.name}" (${e.percentage}%)`)
+        .join('\n');
+
+      const prompt = `
+Eres un experto en psicología educativa y análisis emocional de adolescentes. Te proporciono una lista de emociones reportadas por estudiantes de secundaria en Perú, cada una con su porcentaje de incidencia.
+
+Tu tarea es agrupar emociones similares o relacionadas en categorías emocionales más amplias y significativas. Esto ayudará a los psicólogos educativos y docentes a comprender mejor el estado emocional de los estudiantes.
+
+Lista de emociones originales:
+${emotionsList}
+
+Instrucciones:
+1. Agrupa emociones similares o que pertenezcan a la misma familia emocional
+2. Crea nombres descriptivos y psicológicamente precisos para cada grupo
+3. Suma los porcentajes de las emociones agrupadas
+4. Mantén la lista de emociones originales que forman cada grupo
+5. Si una emoción es única y no se puede agrupar, manténla como está
+6. Enfócate en crear entre 3-5 grupos emocionales principales
+7. Los nombres de los grupos deben ser profesionales y comprensibles para educadores y psicólogos
+
+Considera estas familias emocionales comunes:
+- Ansiedad y preocupación
+- Tristeza y melancolía
+- Enojo y frustración
+- Miedo y inseguridad
+- Alegría y satisfacción
+
+Formato requerido - responde SOLO con un JSON válido:
+{
+  "clustered_emotions": [
+    {
+      "name": "Nombre descriptivo del grupo emocional",
+      "percentage": suma_de_porcentajes_agrupados,
+      "original_items": ["emoción original 1", "emoción original 2", ...]
+    }
+  ]
+}
+`;
+
+      // Generate clustering using Gemini AI
+      const result = await genAI.models.generateContent({
+        model: modelName,
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
+          },
+        ],
+        config: {
+          systemInstruction:
+            'Eres un experto en psicología educativa especializado en el análisis emocional de adolescentes en el contexto peruano.',
+        },
+      });
+
+      const responseText =
+        result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      // Parse the AI response
+      let aiClustering;
+      try {
+        aiClustering = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Failed to parse AI clustering response:', responseText);
+        // Fallback to original data if AI parsing fails
+        aiClustering = {
+          clustered_emotions: data.main_emotions.map((e) => ({
+            name: e.name,
+            percentage: e.percentage,
+            original_items: [e.name],
+          })),
+        };
+      }
+
+      const clusteredAt = new Date().toISOString();
+
+      // Save clustering to database
+      const { error: insertError } = await retired-providerAdmin
+        .from('clustered_emotions' as any)
+        .insert({
+          original_emotions: data.main_emotions,
+          clustered_emotions: aiClustering.clustered_emotions,
+          clustered_at: clusteredAt,
+          input_hash: inputHash,
+        } as any);
+
+      if (insertError) {
+        console.error(
+          'Failed to save emotion clustering to database:',
+          insertError
+        );
+        // Don't fail the request if we can't save to DB, just log the error
+      }
+
+      return {
+        success: true,
+        data: {
+          clustered_emotions: aiClustering.clustered_emotions,
+          clustered_at: clusteredAt,
+        },
+        message: 'Emotions clustered and saved successfully',
+      };
+    } catch (error: any) {
+      console.error('Cluster emotions error:', error);
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to cluster emotions',
       };
     }
   }

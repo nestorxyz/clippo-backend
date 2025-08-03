@@ -994,7 +994,7 @@ async function escalateCase(
   } = args;
 
   // Qualified personnel phone numbers
-  const qualifiedNumbers = ['+51989009435', '+51982463005', '+51944434709'];
+  const qualifiedNumbers = ['+51989009435', '+51944434709'];
 
   try {
     // Format current datetime in Lima timezone
@@ -1908,6 +1908,34 @@ Los colores deben ser uno de: blue, green, purple, orange, yellow, red, gray.
         config: {
           systemInstruction:
             'Eres un experto en bienestar estudiantil y análisis educativo especializado en el contexto peruano.',
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              recommendations: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: {
+                      type: Type.NUMBER,
+                    },
+                    title: {
+                      type: Type.STRING,
+                    },
+                    description: {
+                      type: Type.STRING,
+                    },
+                    color: {
+                      type: Type.STRING,
+                    },
+                  },
+                  required: ['id', 'title', 'description', 'color'],
+                },
+              },
+            },
+            required: ['recommendations'],
+          },
         },
       });
 

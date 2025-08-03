@@ -103,7 +103,7 @@ async function scheduleBatchProcessing(phoneNumber: string): Promise<void> {
 
     // Process the batch
     await processUserMessageBatch(phoneNumber);
-  }, 5000); // 5 seconds
+  }, 10); // 5 seconds
 
   // Store timer reference
   userBatchTimers.set(phoneNumber, timer);

@@ -1479,71 +1479,136 @@ export class SunquService {
             ) / 10
           : 0; // Default value for demo
 
-      // 4. Main problems (last 15 days)
-      const { data: problemsData, error: problemsError } = await retired-providerAdmin
-        .from('register_cases')
-        .select('mentioned_topics')
-        .gte('created_at', fifteenDaysAgo.toISOString())
-        .eq('usage_type', 'emocional');
+      // 4. Main problems - check for existing clustering first, otherwise use last 15 days
+      let mainProblems;
+      let initialClusteredProblems = null;
+      let initialProblemsClusteredAt = null;
 
-      if (problemsError) throw problemsError;
+      // First, try to get the most recent clustering (from all data)
+      const { data: initialProblemsCluster } = await retired-providerAdmin
+        .from('clustered_problems' as any)
+        .select('clustered_problems, clustered_at, original_problems')
+        .order('clustered_at', { ascending: false })
+        .limit(1)
+        .single();
 
-      const topicCounts: { [key: string]: number } = {};
-      problemsData.forEach((case_) => {
-        if (case_.mentioned_topics && Array.isArray(case_.mentioned_topics)) {
-          case_.mentioned_topics.forEach((topic: any) => {
-            if (typeof topic === 'string') {
-              topicCounts[topic] = (topicCounts[topic] || 0) + 1;
-            }
-          });
-        }
-      });
+      if (initialProblemsCluster) {
+        // Use clustered data if available
+        initialClusteredProblems = Array.isArray(
+          (initialProblemsCluster as any).clustered_problems
+        )
+          ? (initialProblemsCluster as any).clustered_problems
+          : JSON.parse(
+              (initialProblemsCluster as any).clustered_problems as string
+            );
+        initialProblemsClusteredAt = (initialProblemsCluster as any)
+          .clustered_at;
 
-      const totalProblems = Object.values(topicCounts).reduce(
-        (sum, count) => sum + count,
-        0
-      );
-      const mainProblems = Object.entries(topicCounts)
-        .map(([topic, count]) => ({
-          name: topic,
-          percentage:
-            totalProblems > 0 ? Math.round((count / totalProblems) * 100) : 0,
-        }))
-        .sort((a, b) => b.percentage - a.percentage)
-        .slice(0, 3);
+        // For the basic analytics, show the top 3 clustered groups
+        mainProblems = initialClusteredProblems
+          .sort((a: any, b: any) => b.percentage - a.percentage)
+          .slice(0, 3);
+      } else {
+        // Fallback to last 15 days data if no clustering exists
+        const { data: problemsData, error: problemsError } = await retired-providerAdmin
+          .from('register_cases')
+          .select('mentioned_topics')
+          .gte('created_at', fifteenDaysAgo.toISOString())
+          .eq('usage_type', 'emocional');
 
-      // 5. Main emotions (last 15 days)
-      const { data: emotionsData, error: emotionsError } = await retired-providerAdmin
-        .from('register_cases')
-        .select('detected_emotions')
-        .gte('created_at', fifteenDaysAgo.toISOString())
-        .eq('usage_type', 'emocional');
+        if (problemsError) throw problemsError;
 
-      if (emotionsError) throw emotionsError;
+        const topicCounts: { [key: string]: number } = {};
+        problemsData.forEach((case_) => {
+          if (case_.mentioned_topics && Array.isArray(case_.mentioned_topics)) {
+            case_.mentioned_topics.forEach((topic: any) => {
+              if (typeof topic === 'string') {
+                topicCounts[topic] = (topicCounts[topic] || 0) + 1;
+              }
+            });
+          }
+        });
 
-      const emotionCounts: { [key: string]: number } = {};
-      emotionsData.forEach((case_) => {
-        if (case_.detected_emotions && Array.isArray(case_.detected_emotions)) {
-          case_.detected_emotions.forEach((emotion: any) => {
-            if (typeof emotion === 'string') {
-              emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
-            }
-          });
-        }
-      });
+        const totalProblems = Object.values(topicCounts).reduce(
+          (sum, count) => sum + count,
+          0
+        );
+        mainProblems = Object.entries(topicCounts)
+          .map(([topic, count]) => ({
+            name: topic,
+            percentage:
+              totalProblems > 0 ? Math.round((count / totalProblems) * 100) : 0,
+          }))
+          .sort((a, b) => b.percentage - a.percentage)
+          .slice(0, 3);
+      }
 
-      const totalEmotions = Object.values(emotionCounts).reduce(
-        (sum, count) => sum + count,
-        0
-      );
-      const mainEmotions = Object.entries(emotionCounts)
-        .map(([emotion, count]) => ({
-          name: emotion,
-          percentage:
-            totalEmotions > 0 ? Math.round((count / totalEmotions) * 100) : 0,
-        }))
-        .sort((a, b) => b.percentage - a.percentage)
-        .slice(0, 3);
+      // 5. Main emotions - check for existing clustering first, otherwise use last 15 days
+      let mainEmotions;
+      let initialClusteredEmotions = null;
+      let initialEmotionsClusteredAt = null;
+
+      // First, try to get the most recent clustering (from all data)
+      const { data: initialEmotionsCluster } = await retired-providerAdmin
+        .from('clustered_emotions' as any)
+        .select('clustered_emotions, clustered_at, original_emotions')
+        .order('clustered_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (initialEmotionsCluster) {
+        // Use clustered data if available
+        initialClusteredEmotions = Array.isArray(
+          (initialEmotionsCluster as any).clustered_emotions
+        )
+          ? (initialEmotionsCluster as any).clustered_emotions
+          : JSON.parse(
+              (initialEmotionsCluster as any).clustered_emotions as string
+            );
+        initialEmotionsClusteredAt = (initialEmotionsCluster as any)
+          .clustered_at;
+
+        // For the basic analytics, show the top 3 clustered groups
+        mainEmotions = initialClusteredEmotions
+          .sort((a: any, b: any) => b.percentage - a.percentage)
+          .slice(0, 3);
+      } else {
+        // Fallback to last 15 days data if no clustering exists
+        const { data: emotionsData, error: emotionsError } = await retired-providerAdmin
+          .from('register_cases')
+          .select('detected_emotions')
+          .gte('created_at', fifteenDaysAgo.toISOString())
+          .eq('usage_type', 'emocional');
+
+        if (emotionsError) throw emotionsError;
+
+        const emotionCounts: { [key: string]: number } = {};
+        emotionsData.forEach((case_) => {
+          if (
+            case_.detected_emotions &&
+            Array.isArray(case_.detected_emotions)
+          ) {
+            case_.detected_emotions.forEach((emotion: any) => {
+              if (typeof emotion === 'string') {
+                emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
+              }
+            });
+          }
+        });
+
+        const totalEmotions = Object.values(emotionCounts).reduce(
+          (sum, count) => sum + count,
+          0
+        );
+        mainEmotions = Object.entries(emotionCounts)
+          .map(([emotion, count]) => ({
+            name: emotion,
+            percentage:
+              totalEmotions > 0 ? Math.round((count / totalEmotions) * 100) : 0,
+          }))
+          .sort((a, b) => b.percentage - a.percentage)
+          .slice(0, 3);
+      }
 
       // 6. Reported learnings (last 15 days)
       const { data: learningsData, error: learningsError } = await retired-providerAdmin
@@ -1685,10 +1750,12 @@ export class SunquService {
           main_emotions: mainEmotions,
           reported_learnings: reportedLearnings,
           recommendations: recommendations,
-          clustered_problems: clusteredProblems,
-          clustered_emotions: clusteredEmotions,
-          problems_clustered_at: problemsClusteredAt,
-          emotions_clustered_at: emotionsClusteredAt,
+          clustered_problems: initialClusteredProblems || clusteredProblems,
+          clustered_emotions: initialClusteredEmotions || clusteredEmotions,
+          problems_clustered_at:
+            initialProblemsClusteredAt || problemsClusteredAt,
+          emotions_clustered_at:
+            initialEmotionsClusteredAt || emotionsClusteredAt,
         },
         message: 'Dashboard analytics retrieved successfully',
       };

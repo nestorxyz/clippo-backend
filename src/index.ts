@@ -9,6 +9,8 @@ import morgan from 'morgan';
 import authRoutes from './routes/auth.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import linksRoutes from './routes/links.routes.js';
+import billingRoutes from './routes/billing.routes.js';
+import lemonRoutes from './routes/lemon.routes.js';
 
 dotenv.config();
 
@@ -38,6 +40,9 @@ app.use(
 // Logging middleware
 app.use(morgan('dev'));
 
+// Raw body for Lemon webhooks must be registered BEFORE json parser
+app.use('/api/webhooks/lemon', express.raw({ type: 'application/json' }));
+
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -55,6 +60,8 @@ app.get('/health', (_, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/webhooks', lemonRoutes); // /api/webhooks/lemon
+app.use('/api/billing', billingRoutes);
 app.use('/api/links', linksRoutes);
 
 // Error handling middleware (must be last)

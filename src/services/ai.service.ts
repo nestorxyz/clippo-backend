@@ -751,6 +751,31 @@ Execute the two-step process to analyze and save this link with appropriate cate
         img_preview,
       } = args;
 
+      // Quota enforcement (friendly message)
+      try {
+        const { subscriptionService } = await import(
+          './subscription.service.js'
+        );
+        const plan = await subscriptionService.getEnrichedPlan(userId);
+        if (plan.used >= plan.limit) {
+          const upgradeMsg =
+            plan.plan === 'free'
+              ? `🚀 Free plan limit reached (${plan.limit} links). Upgrade to Premium for 200 links each period and unlimited organization power.`
+              : `⚠️ You've reached your current subscription period limit (${
+                  plan.limit
+                }). It resets on ${new Date(plan.period.end).toLocaleDateString(
+                  'en-US'
+                )} (UTC).`;
+          return {
+            success: false,
+            error: 'LINK_QUOTA_EXCEEDED',
+            message: upgradeMsg,
+          };
+        }
+      } catch (quotaErr) {
+        console.error('Quota check error (continuing):', quotaErr);
+      }
+
       const sub_category_name = subcategory || 'general';
 
       // Get or create category

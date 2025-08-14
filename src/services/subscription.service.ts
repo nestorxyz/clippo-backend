@@ -79,6 +79,8 @@ export class SubscriptionService {
       subscriptionId: sub.lemon_subscription_id,
       variantId: sub.variant_id,
       managePortalUrl: sub.customer_portal_url,
+      renewsAt: sub.renews_at,
+      trialEndsAt: sub.trial_ends_at,
     };
   }
 

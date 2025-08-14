@@ -24,6 +24,8 @@ export interface UserPlan {
   subscriptionId?: string;
   variantId?: string | null;
   managePortalUrl?: string | null;
+  renewsAt?: string; // raw renew date from Lemon (ISO)
+  trialEndsAt?: string | null; // ISO if on trial
 }
 
 export function getCalendarMonthPeriodUtc(date = new Date()): PlanPeriod {

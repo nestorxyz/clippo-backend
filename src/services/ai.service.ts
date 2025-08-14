@@ -1,4 +1,5 @@
 import { retired-providerAdmin } from '../config/retired-provider';
+import { enqueueThumbnailJob } from './thumbnail.service';
 import { ServiceResponse } from '../types';
 import { sessionManager } from '../utils/session';
 import { Tables } from '../types/retired-provider';
@@ -514,14 +515,9 @@ Execute the two-step process to analyze and save this link with appropriate cate
       console.log('🚀 Starting AI conversation for link saving');
       console.log('📝 User message:', userMessage);
 
-      // Sequential conversation loop (like edge function)
+      // Sequential conversation loop
       while (continueConversation && conversationStep < 5) {
         conversationStep++;
-        console.log(
-          `\n🔄 Conversation step ${conversationStep} contents:`,
-          JSON.stringify(contents, null, 2)
-        );
-
         const result = await genAI.models.generateContent({
           model: modelName,
           contents: contents,
@@ -531,22 +527,16 @@ Execute the two-step process to analyze and save this link with appropriate cate
           },
         });
 
-        console.log('🤖 AI Response received');
-        console.log('📞 Function calls:', result.functionCalls?.length || 0);
-
         const functionCalls = result.functionCalls;
-
         if (functionCalls && functionCalls.length > 0) {
-          // Add AI's function calls to conversation
           const functionCallParts = functionCalls.map((fc) => ({
             functionCall: fc,
           }));
           contents.push({ role: 'model', parts: functionCallParts });
 
-          // Execute function calls and collect responses
-          const functionResponseParts = [];
+          const functionResponseParts: any[] = [];
           for (const fc of functionCalls) {
-            let functionResponse;
+            let functionResponse: any;
             if (fc.name === 'get_url_info') {
               urlInfo = await this.getUrlInfo(
                 fc.args?.url as string,
@@ -557,38 +547,21 @@ Execute the two-step process to analyze and save this link with appropriate cate
               linkResult = await this.registerLink(userId, fc.args);
               functionResponse = linkResult;
             } else {
-              console.log('❌ Unknown function:', fc.name);
               functionResponse = { success: false, error: 'Unknown function' };
             }
-
             functionResponseParts.push({
               functionResponse: { name: fc.name, response: functionResponse },
             });
           }
-
-          // Add function responses to conversation
           contents.push({ role: 'function', parts: functionResponseParts });
         } else {
-          console.log('🏁 No more function calls - ending conversation');
           continueConversation = false;
-          if (result.text) {
-            console.log('💬 Final AI text response:', result.text);
-          }
         }
       }
 
-      console.log('\n📊 Final Results:');
-      console.log('🔍 URL Info available:', !!urlInfo);
-      console.log('💾 Link saved:', !!linkResult?.success);
-
-      // If AI didn't follow the two-step process, handle it
+      // If AI didn't follow the two-step process, do fallback
       if (!urlInfo && !linkResult) {
-        console.log('⚠️ AI did not complete two-step process - using fallback');
-        // Fallback: do the two-step process manually
         urlInfo = await this.getUrlInfo(url);
-        console.log('🔍 Fallback URL Info:', JSON.stringify(urlInfo, null, 2));
-
-        // Create fallback registration data
         const fallbackData = {
           url,
           title: title || urlInfo?.urlMetadata?.title || 'Saved Link',
@@ -600,33 +573,14 @@ Execute the two-step process to analyze and save this link with appropriate cate
           source: 'web',
           img_preview: urlInfo?.urlMetadata?.image || null,
         };
-
-        console.log(
-          '💾 Fallback registration data:',
-          JSON.stringify(fallbackData, null, 2)
-        );
         linkResult = await this.registerLink(userId, fallbackData);
-        console.log(
-          '💾 Fallback link result:',
-          JSON.stringify(linkResult, null, 2)
-        );
-      } else if (!linkResult) {
-        console.log(
-          '⚠️ URL info available but no link saved - this should not happen'
-        );
-        console.log('🔍 Available URL Info:', JSON.stringify(urlInfo, null, 2));
       }
 
       if (!linkResult || !linkResult.success) {
-        console.error('❌ Failed to save link');
-        console.error('📊 Link result:', JSON.stringify(linkResult, null, 2));
-        console.error('📊 URL info:', JSON.stringify(urlInfo, null, 2));
         throw new Error(
           `Failed to save link: ${linkResult?.error || 'Unknown error'}`
         );
       }
-
-      console.log('✅ Link saved successfully!');
 
       // Get the saved link data to return
       const { data: savedLink, error: fetchError } = await retired-providerAdmin
@@ -844,6 +798,17 @@ Execute the two-step process to analyze and save this link with appropriate cate
       if (!newLink) {
         console.error('❌ No link data returned');
         return { success: false, error: 'Failed to create link.' };
+      }
+
+      // If we have a remote preview, enqueue background thumbnail processing (best-effort)
+      if (img_preview && newLink?.id) {
+        enqueueThumbnailJob({
+          userId,
+          linkId: newLink.id,
+          sourceUrl: img_preview,
+        }).catch((e: unknown) =>
+          console.warn('enqueueThumbnailJob failed:', e)
+        );
       }
 
       // Handle tags if provided

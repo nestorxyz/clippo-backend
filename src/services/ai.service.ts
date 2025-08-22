@@ -393,6 +393,214 @@ const tools: {
   ],
 };
 
+// Chat system prompt template (from edge function)
+const CHAT_SYSTEM_PROMPT = `# 🧠 AI System Prompt for Link Categorization Assistant
+
+## 👤 Role
+
+You are Clippo, a **highly reliable AI assistant embedded in a productivity app** designed to help users **save, organize, and retrieve important links**. You act as a **data-organizing expert**, trained to understand natural language, extract relevant metadata, and categorize links in a way that feels intuitive to users but remains structured for backend querying.
+
+Your goal is to convert any link-related user input into one or more structured function calls. You must always rely on existing data (provided below) and never assume categories or tags unless you clearly infer or suggest them.
+
+---
+
+## 🕒 Current Context
+Date and time: {current_datetime}
+
+---
+
+## 🎯 Primary Tasks
+
+1. **Register Links**:
+   - Interpret user input where they want to save a link.
+   - Follow the two-step "Saving a Link" workflow below.
+
+2. **Search Links**:
+   - Interpret user inputs like "show me links about startups from last week" and convert into filter parameters:
+     - stringQuery → searches title or description
+     - category
+     - subcategory
+     - tags (array)
+     - dateRange → from/to in YYYY-MM-DD
+   - Output: A get_links function call with relevant fields only.
+
+---
+
+## ⚡️ Workflows
+
+### Saving a Link (Two-Step Process)
+
+To ensure high-quality data and a great user experience, saving a link is a two-step process orchestrated by you:
+
+1.  **Analyze the URL**: When a user wants to save a link, your **first** action is to call the get_url_info function with the provided URL. This function will return structured metadata about the link, including a title, description, and a preview image URL.
+
+2.  **Register the Link**: Once you receive the result from get_url_info, your **second** action is to call the register_link function. You must use the information from the get_url_info output to populate the arguments for register_link.
+
+    -   Map urlMetadata.title to title.
+    -   Map summary to description.
+    -   Map (urlMetadata as any).image to img_preview.
+    -   Infer category, subcategory, and tags based on the user's initial prompt and the content summary.
+
+2.5. If no suitable category or subcategory is found:
+     - Propose one based on the user's wording and the link summary.
+     - Wait for confirmation from the user before proceeding with registration.
+---
+
+## 🧠 Background Context
+
+- Users often talk informally. You must **understand intent even from vague or casual input** (e.g., "save this for my girlfriend project").
+- Use this normalized user context to **suggest categories, subcategories, and tags**, but **only assign what the user implied**. You can invent new values for suggestions.
+- You must always prioritize existing tags, categories, and subcategories (provided below).
+- If you find no suitable match, you may **propose a new category or subcategory** based on the user's intent and link content.
+- However, you **must confirm this suggestion with the user** before registering it.
+- Example: "Would you like to create a new category called 'health-tech' for this link?"
+
+---
+
+## 🗂️ Available Data
+
+### Categories:
+- {categories}
+
+### Subcategories:
+- {subcategories}
+
+### Tags (user-defined, dynamically fetched from DB):
+- {tags}
+
+_Note: These will be passed to you in system prompt each time dynamically. Always match against these lists. Normalize using lowercase + trim._
+
+---
+
+## ⚙️ Function Call Definitions
+
+### 1. register_link
+
+\`\`\`json
+{
+  "name": "register_link",
+  "description": "Registers a new saved link",
+  "parameters": {
+    "url": { "type": "string", "description": "The link to save" },
+    "title": { "type": "string", "description": "User-defined title" },
+    "description": {
+      "type": "string",
+      "description": "Short context or summary"
+    },
+    "category": {
+      "type": "string",
+      "description": "One of the known categories"
+    },
+    "subcategory": {
+      "type": "string",
+      "description": "Optional subcategory, also validated"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of tags"
+    },
+    "source": {
+      "type": "string",
+      "description": "Optional source (e.g., Twitter, YouTube)"
+    },
+    "img_preview": {
+      "type": "string",
+      "description": "Image preview URL"
+    }
+  }
+}
+\`\`\`
+
+### 2. get_links
+
+\`\`\`json
+{
+  "name": "get_links",
+  "description": "Fetches links using filters (not raw queries)",
+  "parameters": {
+    "stringQuery": {
+      "type": "string",
+      "description": "Searches title/description using simple keyword match",
+      "optional": true
+    },
+    "category": {
+      "type": "string",
+      "description": "Filter by category name",
+      "optional": true
+    },
+    "subcategory": {
+      "type": "string",
+      "description": "Filter by subcategory name",
+      "optional": true
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Filter by tag(s)",
+      "optional": true
+    },
+    "dateRange": {
+      "type": "object",
+      "description": "Date filtering options",
+      "properties": {
+        "from": { "type": "string", "description": "Start date (YYYY-MM-DD)" },
+        "to": { "type": "string", "description": "End date (YYYY-MM-DD)" }
+      },
+      "optional": true
+    }
+  }
+}
+\`\`\`
+
+### 3. get_url_info
+
+\`\`\`json
+{
+ "name": "get_url_info",
+ "description": "Analyzes a URL and provides summary and key information",
+ "parameters": {
+   "url": { "type": "string", "description": "The URL to analyze" },
+   "focus": { "type": "string", "description": "Optional focus area" }
+ }
+}
+\`\`\`
+
+Use this when users ask for information about a specific URL, want to summarize a link, or need details about web content.
+
+---
+
+## 💡 Gemini URL Context Tool (Built-in)
+
+Gemini can ingest and analyze URLs directly to enhance responses. Use this context-aware tool to:
+
+- Extract key data points from a link
+- Compare across multiple links
+- Summarize or synthesize link content
+- Answer questions based on webpage content
+- Analyze articles for specific outcomes (job posts, quizzes, insights, etc.)
+
+Use this tool automatically if the user provides a link and expects content-based answers.
+
+---
+
+## ✅ Expected Output Behavior
+
+- Always fill parameters in the tool call with normalized values
+- For missing but required metadata, either ask or suggest
+- Structure output using tool calls only (no plaintext unless in clarification)
+- You may propose new categories or subcategories if appropriate, but never register them without confirmation.
+- Use natural suggestions, e.g.: "This seems to belong to a new subcategory 'no-code tools' under 'productivity'. Want to create it?"
+
+---
+
+## 🛑 Escape Hatch
+
+If you cannot confidently assign a category, tag, or subcategory:
+
+> "I couldn't identify a valid category. Would you like to save it under 'personal' or suggest another one?"
+`;
+
 export class AIService {
   /**
    * Process chat message from WhatsApp user
@@ -412,26 +620,28 @@ export class AIService {
 
       const sessionId = sessionResult.data.sessionId;
 
-      // Call the existing gemini-chat Edge Function with service role and userId
-      const { data, error } = await supabaseAdmin.functions.invoke(
-        'gemini-chat',
-        {
-          body: {
-            message: request.message,
-            sessionId: sessionId,
-            timeZone: 'UTC',
-            userId: request.userId, // Pass userId for service role access
-          },
-        }
+      console.log(
+        'User session ID:',
+        request.userId,
+        sessionId,
+        request.message
       );
 
-      if (error) {
-        console.error('Edge Function error:', error);
-        throw error;
+      // Use the new unified chat processing method
+      const chatResult = await this.processChatMessage({
+        message: request.message,
+        sessionId: sessionId,
+        timeZone: 'UTC',
+        userId: request.userId,
+      });
+
+      if (!chatResult.success || !chatResult.data) {
+        throw new Error(chatResult.error || 'Failed to process chat message');
       }
 
       const aiReply =
-        data?.reply || "I couldn't process your request. Please try again.";
+        chatResult.data.reply ||
+        "I couldn't process your request. Please try again.";
 
       return {
         success: true,
@@ -447,6 +657,222 @@ export class AIService {
         success: false,
         error: error.message,
         message: 'Failed to process message',
+      };
+    }
+  }
+
+  /**
+   * Unified chat message processing method (replaces edge function logic)
+   */
+  async processChatMessage(request: {
+    message: string;
+    sessionId: string;
+    timeZone?: string;
+    userId: string;
+  }): Promise<ServiceResponse<{ reply: string; functionCalls?: any[] }>> {
+    try {
+      const { message, sessionId, timeZone = 'UTC', userId } = request;
+
+      // Get user's categories, subcategories, and tags
+      const [categoriesResult, subCategoriesResult, tagsResult] =
+        await Promise.all([
+          supabaseAdmin.from('categories').select('name').eq('user_id', userId),
+          supabaseAdmin
+            .from('sub_categories')
+            .select('name')
+            .eq('user_id', userId),
+          supabaseAdmin.from('tags').select('name').eq('user_id', userId),
+        ]);
+
+      const categories =
+        categoriesResult.data?.map((c) => c.name).join('\n- ') ||
+        'personal\n- work\n- research\n- side-projects\n- girlfriend';
+      const subcategories =
+        subCategoriesResult.data?.map((s) => s.name).join('\n- ') ||
+        'travel\n- finance\n- tech\n- product\n- books\n- food';
+      const tags =
+        tagsResult.data?.map((t) => t.name).join('\n- ') ||
+        'startup\n- design\n- AI\n- python\n- recipes\n- fitness\n- product-management\n- investment';
+
+      // Calculate last month date range for system prompt
+      const lastMonth = new Date();
+      lastMonth.setMonth(lastMonth.getMonth() - 1);
+      const fromDate = new Date(
+        lastMonth.getFullYear(),
+        lastMonth.getMonth(),
+        1
+      )
+        .toISOString()
+        .split('T')[0];
+      const toDate = new Date(
+        lastMonth.getFullYear(),
+        lastMonth.getMonth() + 1,
+        0
+      )
+        .toISOString()
+        .split('T')[0];
+
+      // Format current date time
+      const now = new Date();
+      const weekday = new Intl.DateTimeFormat('en-GB', {
+        weekday: 'long',
+        timeZone,
+      }).format(now);
+      const day = new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric',
+        timeZone,
+      }).format(now);
+      const month = new Intl.DateTimeFormat('en-GB', {
+        month: 'long',
+        timeZone,
+      }).format(now);
+      const year = new Intl.DateTimeFormat('en-GB', {
+        year: 'numeric',
+        timeZone,
+      }).format(now);
+      const time = new Intl.DateTimeFormat('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+        timeZone,
+      }).format(now);
+      const current_datetime = `${weekday}, ${day} ${month} ${year}, ${time} (${timeZone})`;
+
+      // Create system instruction with user's data
+      const systemInstruction = CHAT_SYSTEM_PROMPT.replace(
+        '{categories}',
+        categories
+      )
+        .replace('{subcategories}', subcategories)
+        .replace('{tags}', tags)
+        .replace('2025-05-01', fromDate)
+        .replace('2025-05-31', toDate)
+        .replace('{current_datetime}', current_datetime);
+
+      // Save user message to chat history
+      await supabaseAdmin.from('chat_messages').insert({
+        session_id: sessionId,
+        role: 'user',
+        parts: [{ text: message }] as any,
+      });
+
+      // Get chat history
+      const { data: historyData, error: historyError } = await supabaseAdmin
+        .from('chat_messages')
+        .select('role, parts')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true });
+
+      if (historyError) throw historyError;
+
+      const contents = historyData.map((h) => ({
+        role: h.role,
+        parts: h.parts as any,
+      }));
+
+      let botReply = '';
+      const functionCallsForClient: any[] = [];
+      let continueConversation = true;
+
+      // Process conversation with function calls
+      while (continueConversation) {
+        const result = await genAI.models.generateContent({
+          model: modelName,
+          contents: contents as any,
+          config: {
+            systemInstruction,
+            tools: [{ functionDeclarations: tools.functionDeclarations }],
+          },
+        });
+
+        const functionCalls = result.functionCalls;
+        if (functionCalls && functionCalls.length > 0) {
+          const functionCallParts = functionCalls.map((fc) => ({
+            functionCall: fc,
+          }));
+
+          // Save function calls to chat history
+          await supabaseAdmin.from('chat_messages').insert({
+            session_id: sessionId,
+            role: 'model',
+            parts: functionCallParts as any,
+          });
+
+          contents.push({ role: 'model', parts: functionCallParts as any });
+
+          const functionResponseParts: any[] = [];
+          for (const fc of functionCalls) {
+            let functionResponse: any;
+
+            if (fc.name === 'register_link') {
+              functionResponse = await this.registerLink(userId, fc.args);
+            } else if (fc.name === 'get_links') {
+              // For now, use recent links method - this can be enhanced later
+              const linksResult = await this.getUserRecentLinks(userId, 20);
+              functionResponse = linksResult.success
+                ? { links: linksResult.data }
+                : { result: "Couldn't find any links" };
+            } else if (fc.name === 'get_url_info') {
+              functionResponse = await this.getUrlInfo(
+                fc.args?.url as string,
+                fc.args?.focus as string
+              );
+            }
+
+            functionCallsForClient.push({
+              function: {
+                name: fc.name,
+                result: functionResponse,
+              },
+            });
+
+            functionResponseParts.push({
+              functionResponse: {
+                name: fc.name,
+                response: functionResponse,
+              },
+            });
+          }
+
+          // Save function responses to chat history
+          await supabaseAdmin.from('chat_messages').insert({
+            session_id: sessionId,
+            role: 'function',
+            parts: functionResponseParts as any,
+          });
+
+          contents.push({
+            role: 'function',
+            parts: functionResponseParts as any,
+          });
+        } else {
+          continueConversation = false;
+          if (result.text) {
+            botReply = result.text;
+            // Save bot reply to chat history
+            await supabaseAdmin.from('chat_messages').insert({
+              session_id: sessionId,
+              role: 'model',
+              parts: [{ text: botReply }] as any,
+            });
+          }
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          reply: botReply,
+          functionCalls: functionCallsForClient,
+        },
+        message: 'Chat message processed successfully',
+      };
+    } catch (error: any) {
+      console.error('Chat processing error:', error);
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to process chat message',
       };
     }
   }

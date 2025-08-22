@@ -1,10 +1,10 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { authenticateSupabaseToken as authenticateToken } from '../middleware/auth.middleware';
+import { authenticateSupabaseToken as authenticateToken } from '../middleware/auth.middleware.js';
 import { userService } from '../services/user.service.js';
 import { otpService } from '../services/otp.service.js';
 import { whatsappService } from '../services/whatsapp.service.js';
-import { AuthRequest } from '../types';
+import { AuthRequest } from '../types/index.js';
 
 const router = Router();
 

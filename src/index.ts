@@ -11,6 +11,7 @@ import webhookRoutes from './routes/webhook.routes.js';
 import linksRoutes from './routes/links.routes.js';
 import billingRoutes from './routes/billing.routes.js';
 import lemonRoutes from './routes/lemon.routes.js';
+import chatRoutes from './routes/chat.routes.js';
 
 dotenv.config();
 
@@ -63,6 +64,7 @@ app.use('/api/webhooks', webhookRoutes);
 app.use('/api/webhooks', lemonRoutes); // /api/webhooks/lemon
 app.use('/api/billing', billingRoutes);
 app.use('/api/links', linksRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

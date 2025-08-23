@@ -512,6 +512,9 @@ To ensure high-quality data and a great user experience, saving a link is a two-
     - ✅ Did get_url_info return urlMetadata.image? → Pass as img_preview
     - ✅ Did get_url_info return transcript? → Pass as content
     - ✅ Did get_url_info return platform? → Pass as source
+
+    **NEVER forget to include content parameter if transcript exists!**
+    - ✅ Did get_url_info return platform? → Pass as source
     - ✅ Are all required fields (url, title, description, category) included?
 
 2.5. If no suitable category or subcategory is found:
@@ -833,19 +836,44 @@ export class AIService {
         parts: [{ text: message }] as any,
       });
 
-      // Get chat history
+      // Get chat history (limit to last 50 messages to avoid token limits)
       const { data: historyData, error: historyError } = await supabaseAdmin
         .from('chat_messages')
         .select('role, parts')
         .eq('session_id', sessionId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (historyError) throw historyError;
 
-      const contents = historyData.map((h) => ({
+      console.log(
+        `📚 Retrieved ${historyData.length} messages from chat history`
+      );
+
+      // Debug: Count messages by role
+      const roleCounts = historyData.reduce(
+        (acc: Record<string, number>, msg) => {
+          acc[msg.role] = (acc[msg.role] || 0) + 1;
+          return acc;
+        },
+        {}
+      );
+      console.log(`📊 Message counts by role:`, roleCounts);
+
+      const contents = historyData.reverse().map((h) => ({
         role: h.role,
         parts: h.parts as any,
       }));
+
+      console.log(`📝 Prepared ${contents.length} content items for AI`);
+      // Debug: Log last few content items
+      contents.slice(-3).forEach((content, index) => {
+        console.log(
+          `   ${index}: role=${content.role}, parts count=${
+            Array.isArray(content.parts) ? content.parts.length : 'not array'
+          }`
+        );
+      });
 
       let botReply = '';
       const functionCallsForClient: any[] = [];
@@ -853,6 +881,20 @@ export class AIService {
 
       // Process conversation with function calls
       while (continueConversation) {
+        console.log(`🔄 AI Call - Contents length: ${contents.length}`);
+
+        // Debug: Log the last few items in contents to see what AI has access to
+        if (contents.length > 0) {
+          const lastContent = contents[contents.length - 1];
+          console.log(`📋 Last content role: ${lastContent.role}`);
+          if (lastContent.role === 'function') {
+            console.log(
+              `🔧 Function responses available to AI:`,
+              JSON.stringify(lastContent.parts, null, 2)
+            );
+          }
+        }
+
         const result = await genAI.models.generateContent({
           model: modelName,
           contents: contents as any,
@@ -864,6 +906,14 @@ export class AIService {
 
         const functionCalls = result.functionCalls;
         if (functionCalls && functionCalls.length > 0) {
+          console.log(`🛠️ AI making ${functionCalls.length} function call(s):`);
+          functionCalls.forEach((fc, index) => {
+            console.log(
+              `   ${index + 1}. ${fc.name} with args:`,
+              JSON.stringify(fc.args, null, 2)
+            );
+          });
+
           const functionCallParts = functionCalls.map((fc) => ({
             functionCall: fc,
           }));
@@ -914,11 +964,21 @@ export class AIService {
           }
 
           // Save function responses to chat history
-          await supabaseAdmin.from('chat_messages').insert({
+          console.log(`💾 Saving function responses to database...`);
+          const saveResult = await supabaseAdmin.from('chat_messages').insert({
             session_id: sessionId,
             role: 'function',
             parts: functionResponseParts as any,
           });
+
+          if (saveResult.error) {
+            console.error(
+              `❌ Failed to save function responses:`,
+              saveResult.error
+            );
+          } else {
+            console.log(`✅ Function responses saved successfully`);
+          }
 
           contents.push({
             role: 'function',

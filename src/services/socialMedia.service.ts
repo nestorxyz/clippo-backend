@@ -72,29 +72,78 @@ export class SocialMediaService {
   private async cleanup(filePaths: string[]): Promise<void> {
     const cleanupPromises = filePaths.map(async (filePath) => {
       try {
+        await fs.access(filePath); // Check if file exists first
         await fs.unlink(filePath);
-      } catch (error) {
-        console.warn(`Failed to delete temp file ${filePath}:`, error);
+        console.log(`🧹 Cleaned up temp file: ${path.basename(filePath)}`);
+      } catch (error: any) {
+        if (error.code !== 'ENOENT') {
+          console.warn(`⚠️ Failed to delete temp file ${filePath}:`, error.message);
+        }
+        // ENOENT means file doesn't exist, which is fine - no need to warn
       }
     });
     await Promise.allSettled(cleanupPromises);
   }
 
-  /**
+    /**
    * Extract audio from video using ffmpeg
    */
-  private async extractAudio(
-    videoPath: string,
-    audioPath: string
-  ): Promise<void> {
+  private async extractAudio(videoPath: string, audioPath: string): Promise<void> {
+    // Try multiple audio extraction approaches
+    const methods = [
+      // Method 1: libmp3lame (most common)
+      () => this.extractAudioWithCodec(videoPath, audioPath, 'libmp3lame'),
+      // Method 2: aac (fallback)
+      () => this.extractAudioWithCodec(videoPath, audioPath.replace('.mp3', '.aac'), 'aac'),
+      // Method 3: copy audio stream (fastest, no re-encoding)
+      () => this.extractAudioWithCodec(videoPath, audioPath.replace('.mp3', '.aac'), 'copy'),
+    ];
+
+    for (let i = 0; i < methods.length; i++) {
+      try {
+        console.log(`🎵 Trying audio extraction method ${i + 1}...`);
+        await methods[i]();
+        console.log(`🎵 Audio extraction successful with method ${i + 1}`);
+        return;
+      } catch (error) {
+        console.log(`🎵 Method ${i + 1} failed:`, error);
+        if (i === methods.length - 1) {
+          throw new Error(`All audio extraction methods failed. Last error: ${error}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Extract audio with specific codec
+   */
+  private async extractAudioWithCodec(videoPath: string, audioPath: string, codec: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      ffmpeg(videoPath)
-        .output(audioPath)
-        .audioCodec('mp3')
-        .audioBitrate('128k')
+      const command = ffmpeg(videoPath).output(audioPath);
+      
+      if (codec === 'copy') {
+        command.audioCodec('copy');
+      } else {
+        command
+          .audioCodec(codec)
+          .audioBitrate('128k')
+          .audioFrequency(44100);
+      }
+      
+      command
         .noVideo()
-        .on('end', () => resolve())
-        .on('error', (err) => reject(err))
+        .on('end', () => {
+          console.log(`🎵 Audio extraction completed with codec: ${codec}`);
+          resolve();
+        })
+        .on('error', (err) => {
+          reject(err);
+        })
+        .on('progress', (progress) => {
+          if (progress.percent) {
+            console.log(`🎵 Audio extraction progress: ${Math.round(progress.percent)}%`);
+          }
+        })
         .run();
     });
   }
@@ -102,20 +151,23 @@ export class SocialMediaService {
   /**
    * Extract thumbnail from video
    */
-  private async extractThumbnail(
-    videoPath: string,
-    thumbnailPath: string
-  ): Promise<void> {
+  private async extractThumbnail(videoPath: string, thumbnailPath: string): Promise<void> {
     return new Promise((resolve, reject) => {
       ffmpeg(videoPath)
         .screenshots({
           timestamps: ['50%'],
           filename: path.basename(thumbnailPath),
           folder: path.dirname(thumbnailPath),
-          size: '1280x720',
+          size: '1280x720'
         })
-        .on('end', () => resolve())
-        .on('error', (err) => reject(err));
+        .on('end', () => {
+          console.log('🖼️ Thumbnail extraction completed');
+          resolve();
+        })
+        .on('error', (err) => {
+          console.error('🖼️ Thumbnail extraction failed:', err);
+          reject(err);
+        });
     });
   }
 
@@ -158,11 +210,27 @@ export class SocialMediaService {
    */
   private async transcribeAudio(audioPath: string): Promise<string> {
     try {
+      // Determine MIME type based on file extension
+      const extension = path.extname(audioPath).toLowerCase();
+      let mimeType = 'audio/mpeg'; // default
+      
+      if (extension === '.aac') {
+        mimeType = 'audio/aac';
+      } else if (extension === '.wav') {
+        mimeType = 'audio/wav';
+      } else if (extension === '.m4a') {
+        mimeType = 'audio/mp4';
+      }
+
+      console.log(`🎤 Uploading audio file for transcription (${mimeType})...`);
+      
       // Upload audio file to Gemini
       const uploadResult = await this.genAI.files.upload({
         file: audioPath,
-        config: { mimeType: 'audio/mpeg' },
+        config: { mimeType },
       });
+
+      console.log(`🎤 Audio uploaded, generating transcript...`);
 
       // Generate transcript
       const result = await this.genAI.models.generateContent({
@@ -194,7 +262,9 @@ export class SocialMediaService {
         console.warn('Failed to delete Gemini file:', deleteError);
       }
 
-      return result.text || '';
+      const transcript = result.text || '';
+      console.log(`🎤 Transcription completed (${transcript.length} characters)`);
+      return transcript;
     } catch (error) {
       console.error('Transcription error:', error);
       throw new Error(`Failed to transcribe audio: ${error}`);
@@ -211,6 +281,7 @@ export class SocialMediaService {
     }
 
     let tempFiles: string[] = [];
+    let actualAudioPath = '';
 
     try {
       await this.ensureTempDir();
@@ -218,13 +289,13 @@ export class SocialMediaService {
       // Generate unique file names
       const timestamp = Date.now();
       const videoPath = path.join(this.tempDir, `video_${timestamp}.mp4`);
-      const audioPath = path.join(this.tempDir, `audio_${timestamp}.mp3`);
+      const baseAudioPath = path.join(this.tempDir, `audio_${timestamp}`);
       const thumbnailPath = path.join(
         this.tempDir,
         `thumbnail_${timestamp}.jpg`
       );
 
-      tempFiles = [videoPath, audioPath, thumbnailPath];
+      tempFiles = [videoPath, thumbnailPath]; // We'll add audio file later when we know the extension
 
       console.log('🎬 Starting video download from:', platform);
 
@@ -255,9 +326,22 @@ export class SocialMediaService {
         ),
       ]);
 
-      // Extract audio for transcription
+      // Extract audio for transcription (this will determine the final audio path)
       console.log('🎵 Extracting audio...');
-      await this.extractAudio(videoPath, audioPath);
+      const initialAudioPath = `${baseAudioPath}.mp3`;
+      actualAudioPath = initialAudioPath;
+      
+      try {
+        await this.extractAudio(videoPath, initialAudioPath);
+        actualAudioPath = initialAudioPath;
+      } catch (error) {
+        // Try with .aac extension
+        const aacAudioPath = `${baseAudioPath}.aac`;
+        await this.extractAudio(videoPath, aacAudioPath);
+        actualAudioPath = aacAudioPath;
+      }
+      
+      tempFiles.push(actualAudioPath); // Add the actual audio file to cleanup list
 
       // Extract thumbnail
       console.log('🖼️ Extracting thumbnail...');
@@ -265,7 +349,7 @@ export class SocialMediaService {
 
       // Transcribe audio
       console.log('📝 Transcribing audio...');
-      const transcript = await this.transcribeAudio(audioPath);
+      const transcript = await this.transcribeAudio(actualAudioPath);
 
       // Upload thumbnail to Supabase
       console.log('☁️ Uploading thumbnail...');

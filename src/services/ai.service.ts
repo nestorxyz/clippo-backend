@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase';
 import { enqueueThumbnailJob } from './thumbnail.service';
+import { socialMediaService } from './socialMedia.service';
 import { ServiceResponse } from '../types';
 import { sessionManager } from '../utils/session';
 import { Tables } from '../types/supabase';
@@ -140,7 +141,8 @@ You are a **Link Analysis and Categorization Specialist** embedded in a producti
     "subcategory": { "type": "string", "optional": true },
     "tags": { "type": "array", "items": { "type": "string" }, "optional": true },
     "source": { "type": "string", "optional": true },
-    "img_preview": { "type": "string", "optional": true }
+    "img_preview": { "type": "string", "optional": true },
+    "content": { "type": "string", "optional": true, "description": "Content text like transcript for videos" }
   }
 }
 \`\`\`
@@ -386,6 +388,10 @@ const tools: {
             description: 'Optional source (e.g., Twitter, YouTube)',
           },
           img_preview: { type: Type.STRING, description: 'Image preview URL' },
+          content: {
+            type: Type.STRING,
+            description: 'Optional content text (e.g., transcript for videos)',
+          },
         },
         required: ['url', 'category', 'title'],
       },
@@ -439,6 +445,7 @@ To ensure high-quality data and a great user experience, saving a link is a two-
     -   Map urlMetadata.title to title.
     -   Map summary to description.
     -   Map (urlMetadata as any).image to img_preview.
+    -   Map transcript to content (if available, especially for social media videos).
     -   Infer category, subcategory, and tags based on the user's initial prompt and the content summary.
 
 2.5. If no suitable category or subcategory is found:
@@ -1058,6 +1065,82 @@ Execute the two-step process to analyze and save this link with appropriate cate
    */
   private async getUrlInfo(url: string, focus?: string): Promise<any> {
     try {
+      // Check if this is a social media URL that needs special processing
+      if (socialMediaService.isSocialMediaUrl(url)) {
+        console.log(
+          '🎬 Detected social media URL, processing with enhanced extraction...'
+        );
+
+        const socialResult = await socialMediaService.processSocialMediaVideo(
+          url
+        );
+
+        if (socialResult.success && socialResult.info) {
+          const { info } = socialResult;
+
+          // Create enhanced prompt with transcript
+          const enhancedPrompt = focus
+            ? `Analyze this ${info.platform} video focusing on: ${focus}. 
+               Title: ${info.title}
+               Description: ${info.description}
+               Transcript: ${info.transcript || 'No transcript available'}
+               Duration: ${
+                 info.duration
+                   ? `${Math.round(info.duration)} seconds`
+                   : 'Unknown'
+               }
+               URL: ${url}`
+            : `Analyze this ${
+                info.platform
+              } video and provide a comprehensive summary including: main topic, key points, type of content, and any important details.
+               Title: ${info.title}
+               Description: ${info.description}
+               Transcript: ${info.transcript || 'No transcript available'}
+               Duration: ${
+                 info.duration
+                   ? `${Math.round(info.duration)} seconds`
+                   : 'Unknown'
+               }
+               URL: ${url}`;
+
+          // Get AI analysis with transcript context
+          let aiSummary = '';
+          try {
+            const result = await genAI.models.generateContent({
+              model: modelName,
+              contents: enhancedPrompt,
+              config: {
+                tools: [{ urlContext: {} }],
+              },
+            });
+            aiSummary = result.text || '';
+          } catch (aiError) {
+            console.error('AI analysis failed, using basic info:', aiError);
+            aiSummary = `${info.platform} video: ${info.title}. ${info.description}`;
+          }
+
+          return {
+            success: true,
+            summary:
+              aiSummary || info.description || `${info.platform} video content`,
+            urlMetadata: {
+              title: info.title || 'Untitled Video',
+              description: info.description || '',
+              image: info.thumbnailUrl || null,
+            },
+            transcript: info.transcript, // Include transcript for storage in content column
+            platform: info.platform,
+            duration: info.duration,
+          };
+        } else {
+          console.log(
+            '🔄 Social media processing failed, falling back to standard method'
+          );
+          // Fall back to standard processing if social media processing fails
+        }
+      }
+
+      // Standard URL processing (original logic)
       const prompt = focus
         ? `Analyze this URL and provide detailed information focusing on: ${focus}. URL: ${url}`
         : `Analyze this URL and provide a comprehensive summary including: main topic, key points, type of content, and any important details. URL: ${url}`;
@@ -1129,6 +1212,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
         tags,
         source,
         img_preview,
+        content, // Add support for content (transcript)
       } = args;
 
       // Quota enforcement (friendly message)
@@ -1211,6 +1295,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
           title,
           source,
           img_preview,
+          content, // Store transcript or other content
         })
         .select(
           'id, title, description, sub_categories (name, categories (name)), link_tags (tags (name))'

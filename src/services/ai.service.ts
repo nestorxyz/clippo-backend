@@ -1215,6 +1215,8 @@ Execute the two-step process to analyze and save this link with appropriate cate
         content, // Add support for content (transcript)
       } = args;
 
+      console.log(`📥 Registering link:`, args);
+
       // Quota enforcement (friendly message)
       try {
         const { subscriptionService } = await import(

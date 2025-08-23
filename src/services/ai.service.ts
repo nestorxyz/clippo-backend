@@ -94,6 +94,14 @@ You are a **Link Analysis and Categorization Specialist** embedded in a producti
 - After successful register_link, STOP function calling and provide a text summary.
 - Never call the same function twice - once get_url_info and register_link succeed, your job is DONE.
 
+**FIELD MAPPING RULES (Step 1 → Step 2):**
+- **title**: Use urlMetadata.title from get_url_info result
+- **description**: Use summary from get_url_info result  
+- **img_preview**: Use urlMetadata.image from get_url_info result (ALWAYS include if available)
+- **content**: Use transcript from get_url_info result (ALWAYS include if available)
+- **source**: Use platform from get_url_info result (e.g., "Instagram", "TikTok") or infer from URL
+- **category/subcategory/tags**: Infer from content, transcript, and user context
+
 ---
 
 ## 🗂️ AVAILABLE DATA CONTEXT
@@ -225,7 +233,53 @@ You are a **Link Analysis and Categorization Specialist** embedded in a producti
 }
 \`\`\`
 
-### Example 2: Recipe Link
+### Example 2: Social Media Video (Instagram/TikTok)
+**User Input:** URL: https://www.instagram.com/reel/example123
+**User Context:** "Save this motivational video"
+
+**Step 1 Call:**
+\`\`\`json
+{
+  "name": "get_url_info",
+  "arguments": { "url": "https://www.instagram.com/reel/example123" }
+}
+\`\`\`
+
+**Step 1 Result:**
+\`\`\`json
+{
+  "success": true,
+  "summary": "Motivational video about embracing being different and challenging conventional expectations.",
+  "urlMetadata": {
+    "title": "Video by motivational_speaker",
+    "description": "Be different, embrace your unique qualities.",
+    "image": "https://supabase.co/storage/v1/object/public/link-previews/social_instagram_123.jpg"
+  },
+  "transcript": "For the few people who were like me, and felt like everyone told them there was something wrong with them, you are different, and that's okay...",
+  "platform": "instagram",
+  "duration": 22.64
+}
+\`\`\`
+
+**Step 2 Call:**
+\`\`\`json
+{
+  "name": "register_link",
+  "arguments": {
+    "url": "https://www.instagram.com/reel/example123",
+    "title": "Video by motivational_speaker",
+    "description": "Motivational video about embracing being different and challenging conventional expectations.",
+    "category": "personal",
+    "subcategory": "self-improvement",
+    "tags": ["motivation", "personal-growth", "mindset"],
+    "source": "Instagram",
+    "img_preview": "https://supabase.co/storage/v1/object/public/link-previews/social_instagram_123.jpg",
+    "content": "For the few people who were like me, and felt like everyone told them there was something wrong with them, you are different, and that's okay..."
+  }
+}
+\`\`\`
+
+### Example 3: Recipe Link
 **User Input:** URL: https://cooking.com/pasta-recipe
 **User Context:** "Quick pasta recipe for dinner"
 
@@ -325,7 +379,9 @@ Before calling register_link, verify:
 - [ ] Category matches user's existing options or defaults to "personal"
 - [ ] Subcategory is relevant or defaults to "general"
 - [ ] Tags are relevant and follow user's patterns
-- [ ] Image preview is included if available
+- [ ] Image preview is included if available from get_url_info (img_preview parameter)
+- [ ] Transcript is included if available from get_url_info (content parameter)
+- [ ] Source/platform is included if detected (source parameter)
 
 **Your job is complete when both function calls execute successfully. After register_link succeeds, respond with a text summary and DO NOT call any more functions.**
 
@@ -341,7 +397,7 @@ const tools: {
     {
       name: 'get_url_info',
       description:
-        'Analyzes a URL and provides a summary and key information about its content',
+        'Analyzes URLs and provides comprehensive metadata. For social media videos (Instagram Reels, TikTok), downloads video, extracts audio transcripts, generates thumbnails, and provides rich content analysis. For regular URLs, extracts OpenGraph metadata and provides AI-powered summaries.',
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -442,11 +498,21 @@ To ensure high-quality data and a great user experience, saving a link is a two-
 
 2.  **Register the Link**: Once you receive the result from get_url_info, your **second** action is to call the register_link function. You must use the information from the get_url_info output to populate the arguments for register_link.
 
-    -   Map urlMetadata.title to title.
-    -   Map summary to description.
-    -   Map (urlMetadata as any).image to img_preview.
-    -   Map transcript to content (if available, especially for social media videos).
+    **CRITICAL MAPPING RULES:**
+    -   Map urlMetadata.title to title parameter
+    -   Map summary to description parameter  
+    -   Map urlMetadata.image to img_preview parameter (ALWAYS include if present)
+    -   Map transcript to content parameter (ALWAYS include if present - especially for social media videos)
+    -   Map platform info to source parameter (e.g., "Instagram", "TikTok")
     -   Infer category, subcategory, and tags based on the user's initial prompt and the content summary.
+
+    **IMPORTANT:** Always pass img_preview and content if they exist in the get_url_info response!
+
+    **VERIFICATION CHECKLIST before calling register_link:**
+    - ✅ Did get_url_info return urlMetadata.image? → Pass as img_preview
+    - ✅ Did get_url_info return transcript? → Pass as content
+    - ✅ Did get_url_info return platform? → Pass as source
+    - ✅ Are all required fields (url, title, description, category) included?
 
 2.5. If no suitable category or subcategory is found:
      - Propose one based on the user's wording and the link summary.
@@ -514,6 +580,10 @@ _Note: These will be passed to you in system prompt each time dynamically. Alway
     "img_preview": {
       "type": "string",
       "description": "Image preview URL"
+    },
+    "content": {
+      "type": "string",
+      "description": "Optional content text (e.g., transcript for videos)"
     }
   }
 }
@@ -565,15 +635,15 @@ _Note: These will be passed to you in system prompt each time dynamically. Alway
 \`\`\`json
 {
  "name": "get_url_info",
- "description": "Analyzes a URL and provides summary and key information",
+ "description": "Analyzes URLs and provides comprehensive metadata. For social media videos (Instagram Reels, TikTok), it downloads the video, extracts audio transcripts, generates thumbnails, and provides rich content analysis. For regular URLs, it extracts OpenGraph metadata and provides AI-powered summaries.",
  "parameters": {
    "url": { "type": "string", "description": "The URL to analyze" },
-   "focus": { "type": "string", "description": "Optional focus area" }
+   "focus": { "type": "string", "description": "Optional focus area for analysis" }
  }
 }
 \`\`\`
 
-Use this when users ask for information about a specific URL, want to summarize a link, or need details about web content.
+Use this when users ask for information about a specific URL, want to summarize a link, or need details about web content. This tool is especially powerful for social media videos as it provides transcripts and custom thumbnails.
 
 ---
 
@@ -824,6 +894,8 @@ export class AIService {
                 fc.args?.url as string,
                 fc.args?.focus as string
               );
+
+              console.log(`🔍 URL info retrieved:`, functionResponse);
             }
 
             functionCallsForClient.push({

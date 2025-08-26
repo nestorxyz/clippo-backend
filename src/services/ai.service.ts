@@ -742,6 +742,37 @@ export class AIService {
   }
 
   /**
+   * Ensure conversation starts with a user message for valid Gemini API flow
+   * Finds the first user message and returns conversation from that point
+   */
+  private ensureStartsWithUserMessage(contents: any[]): any[] {
+    // Find the first user message
+    const firstUserIndex = contents.findIndex(
+      (content) => content.role === 'user'
+    );
+
+    if (firstUserIndex === -1) {
+      // No user messages found, return empty array (shouldn't happen in normal flow)
+      console.log('⚠️ No user messages found in conversation history');
+      return [];
+    }
+
+    if (firstUserIndex === 0) {
+      // Already starts with user message, return as is
+      console.log('✅ Conversation already starts with user message');
+      return contents;
+    }
+
+    // Start conversation from first user message
+    const trimmedContents = contents.slice(firstUserIndex);
+    console.log(
+      `🔄 Trimmed conversation: ${contents.length} → ${trimmedContents.length} messages (started from first user message at index ${firstUserIndex})`
+    );
+
+    return trimmedContents;
+  }
+
+  /**
    * Unified chat message processing method (replaces edge function logic)
    */
   async processChatMessage(request: {
@@ -836,13 +867,13 @@ export class AIService {
         parts: [{ text: message }] as any,
       });
 
-      // Get chat history (limit to last 50 messages to avoid token limits)
+      // Get chat history (fetch 60 messages to ensure we can start with a user message)
       const { data: historyData, error: historyError } = await supabaseAdmin
         .from('chat_messages')
         .select('role, parts')
         .eq('session_id', sessionId)
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(40);
 
       if (historyError) throw historyError;
 
@@ -863,14 +894,18 @@ export class AIService {
       // Validate and fix conversation flow to prevent API errors
       const validatedHistory = historyData.reverse();
 
-      const contents = validatedHistory.map((h) => ({
+      // Build contents array ensuring it starts with a user message
+      const rawContents = validatedHistory.map((h) => ({
         role: h.role,
         parts: h.parts as any,
       }));
 
+      // Find first user message and start conversation from there
+      const contents = this.ensureStartsWithUserMessage(rawContents);
+
       console.log(`📝 Prepared ${contents.length} content items for AI`);
       // Debug: Log last few content items
-      contents.slice(-3).forEach((content, index) => {
+      contents.slice(-3).forEach((content: any, index: number) => {
         console.log(
           `   ${index}: role=${content.role}, parts count=${
             Array.isArray(content.parts) ? content.parts.length : 'not array'

@@ -860,7 +860,10 @@ export class AIService {
       );
       console.log(`📊 Message counts by role:`, roleCounts);
 
-      const contents = historyData.reverse().map((h) => ({
+      // Validate and fix conversation flow to prevent API errors
+      const validatedHistory = historyData.reverse();
+
+      const contents = validatedHistory.map((h) => ({
         role: h.role,
         parts: h.parts as any,
       }));
@@ -875,6 +878,8 @@ export class AIService {
         );
       });
 
+      console.log('contens', contents);
+
       let botReply = '';
       const functionCallsForClient: any[] = [];
       let continueConversation = true;
@@ -882,6 +887,67 @@ export class AIService {
       // Process conversation with function calls
       while (continueConversation) {
         console.log(`🔄 AI Call - Contents length: ${contents.length}`);
+
+        // Debug: Show last few messages with their parts to understand conversation flow
+        console.log('🔍 Last 5 messages in conversation:');
+        contents.slice(-5).forEach((content: any, index: number) => {
+          const actualIndex = contents.length - 5 + index;
+          console.log(`  [${actualIndex}] role=${content.role}`);
+
+          // Show what type of parts this message has
+          if (Array.isArray(content.parts)) {
+            content.parts.forEach((part: any, partIndex: number) => {
+              if (part.text) {
+                console.log(
+                  `    Part ${partIndex}: text - "${part.text.substring(
+                    0,
+                    100
+                  )}${part.text.length > 100 ? '...' : ''}"`
+                );
+              } else if (part.functionCall) {
+                console.log(
+                  `    Part ${partIndex}: functionCall - ${
+                    part.functionCall.name
+                  }(${JSON.stringify(part.functionCall.args)})`
+                );
+              } else if (part.functionResponse) {
+                console.log(
+                  `    Part ${partIndex}: functionResponse - ${part.functionResponse.name}`
+                );
+              } else {
+                console.log(
+                  `    Part ${partIndex}: unknown type -`,
+                  Object.keys(part)
+                );
+              }
+            });
+          } else {
+            console.log(`    Parts: not an array -`, typeof content.parts);
+          }
+        });
+
+        // Check for conversation flow violations
+        console.log('🔍 Checking conversation flow:');
+        for (let i = 0; i < contents.length - 1; i++) {
+          const current = contents[i];
+          const next = contents[i + 1];
+
+          if (current.role === 'model' && next.role === 'model') {
+            // Check if this is a valid model->model sequence
+            const currentHasFunctionCall =
+              Array.isArray(current.parts) &&
+              current.parts.some((part: any) => part.functionCall);
+            const nextHasFunctionCall =
+              Array.isArray(next.parts) &&
+              next.parts.some((part: any) => part.functionCall);
+
+            console.log(
+              `  [${i}→${
+                i + 1
+              }] model→model: current has functionCall: ${currentHasFunctionCall}, next has functionCall: ${nextHasFunctionCall}`
+            );
+          }
+        }
 
         // Debug: Log the last few items in contents to see what AI has access to
         if (contents.length > 0) {

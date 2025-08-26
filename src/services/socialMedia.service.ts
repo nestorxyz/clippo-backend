@@ -181,10 +181,10 @@ export class SocialMediaService {
     return new Promise((resolve, reject) => {
       ffmpeg(videoPath)
         .screenshots({
-          timestamps: ['50%'],
+          timestamps: ['0.5'],
           filename: path.basename(thumbnailPath),
           folder: path.dirname(thumbnailPath),
-          size: '1280x720',
+          size: '720x1280',
         })
         .on('end', () => {
           console.log('🖼️ Thumbnail extraction completed');

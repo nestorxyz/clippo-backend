@@ -41,6 +41,7 @@ export class SocialMediaService {
     const socialMediaPatterns = [
       /https?:\/\/(?:www\.)?instagram\.com\/reel\/[^/?]+/,
       /https?:\/\/(?:www\.)?tiktok\.com\/@[^/]+\/video\/\d+/,
+      /https?:\/\/vm\.tiktok\.com\/[A-Za-z0-9]+\/?/,
     ];
 
     return socialMediaPatterns.some((pattern) => pattern.test(url));
@@ -51,7 +52,8 @@ export class SocialMediaService {
    */
   private detectPlatform(url: string): 'instagram' | 'tiktok' | null {
     if (url.includes('instagram.com/reel/')) return 'instagram';
-    if (url.includes('tiktok.com')) return 'tiktok';
+    if (url.includes('tiktok.com') || url.includes('vm.tiktok.com'))
+      return 'tiktok';
     return null;
   }
 

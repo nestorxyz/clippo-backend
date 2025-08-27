@@ -1,5 +1,5 @@
 // Billing / quota configuration and helper utilities
-export const FREE_MONTHLY_LIMIT = 20;
+export const FREE_MONTHLY_LIMIT = 500;
 export const PREMIUM_MONTHLY_LIMIT = 200; // temporary cap
 
 // Lemon Squeezy variant IDs (constants, not env-based per user instruction)

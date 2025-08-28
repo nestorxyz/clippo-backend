@@ -25,13 +25,45 @@ export class SocialMediaService {
   private ytdlp: YtDlp;
   private genAI: GoogleGenAI;
   private tempDir: string;
+  private isProductionWithoutPython: boolean = false;
 
   constructor() {
     this.ytdlp = new YtDlp();
     this.genAI = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY!,
+      apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY!,
     });
-    this.tempDir = path.join(os.tmpdir(), 'clippo-social-media');
+    this.tempDir = path.join(os.tmpdir(), 'social-media-temp');
+
+    // Check if we're in production without Python (async initialization)
+    this.checkPythonAvailability();
+  }
+
+  private async checkPythonAvailability(): Promise<void> {
+    try {
+      const { spawn } = require('child_process');
+      const python = spawn('python3', ['--version']);
+
+      python.on('error', () => {
+        console.log(
+          '⚠️ Python3 not available, using fallback mode for social media processing'
+        );
+        this.isProductionWithoutPython = true;
+      });
+
+      python.on('close', (code: number) => {
+        if (code !== 0) {
+          console.log(
+            '⚠️ Python3 check failed, using fallback mode for social media processing'
+          );
+          this.isProductionWithoutPython = true;
+        }
+      });
+    } catch (error) {
+      console.log(
+        '⚠️ Unable to check Python availability, using fallback mode'
+      );
+      this.isProductionWithoutPython = true;
+    }
   }
 
   /**
@@ -308,6 +340,14 @@ export class SocialMediaService {
       return { success: false, error: 'Unsupported platform' };
     }
 
+    // Check if Python is available for yt-dlp
+    if (this.isProductionWithoutPython) {
+      console.log(
+        '⚠️ Python not available, using fallback social media processing'
+      );
+      return this.processSocialMediaFallback(url, platform);
+    }
+
     let tempFiles: string[] = [];
     let actualAudioPath = '';
 
@@ -408,6 +448,63 @@ export class SocialMediaService {
       // Clean up temporary files
       await this.cleanup(tempFiles);
     }
+  }
+
+  /**
+   * Fallback processing when Python/yt-dlp is not available
+   * Uses basic metadata extraction without video download
+   */
+  private async processSocialMediaFallback(
+    url: string,
+    platform: 'instagram' | 'tiktok'
+  ): Promise<ProcessingResult> {
+    console.log(`🔄 Using fallback processing for ${platform} URL`);
+
+    try {
+      // Generate basic info based on URL patterns
+      const result: SocialMediaInfo = {
+        title: this.generateFallbackTitle(url, platform),
+        description: `${
+          platform === 'instagram' ? 'Instagram Reel' : 'TikTok Video'
+        } - Content not available due to processing limitations`,
+        platform: platform,
+        transcript: undefined, // No transcript available in fallback
+        thumbnailUrl: undefined, // No custom thumbnail
+      };
+
+      console.log(`⚠️ Fallback processing completed for ${platform}`);
+      return { success: true, info: result };
+    } catch (error: any) {
+      console.error(`❌ Fallback processing failed for ${platform}:`, error);
+      return {
+        success: false,
+        error: `Fallback processing failed: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Generate a basic title from URL when full processing isn't available
+   */
+  private generateFallbackTitle(
+    url: string,
+    platform: 'instagram' | 'tiktok'
+  ): string {
+    if (platform === 'instagram') {
+      const match = url.match(/\/reel\/([A-Za-z0-9_-]+)/);
+      const reelId = match ? match[1] : 'unknown';
+      return `Instagram Reel: ${reelId}`;
+    } else if (platform === 'tiktok') {
+      const match =
+        url.match(/@([^\/]+)\/video\/(\d+)/) ||
+        url.match(/vm\.tiktok\.com\/([A-Za-z0-9]+)/);
+      if (match) {
+        const identifier = match[1] || match[0];
+        return `TikTok Video: @${identifier}`;
+      }
+      return 'TikTok Video';
+    }
+    return `${platform} Video`;
   }
 }
 

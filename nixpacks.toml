@@ -2,10 +2,18 @@
 nixPkgs = ["nodejs_18", "python3", "python3Packages.pip", "ffmpeg"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = [
+  "npm ci",
+  "pip3 install yt-dlp"
+]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = [
+  "npm run build",
+  "python3 --version",
+  "yt-dlp --version",
+  "ffmpeg -version"
+]
 
 [start]
 cmd = "npm start"

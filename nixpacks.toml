@@ -16,21 +16,4 @@ cmds = [
 NODE_ENV = "production"
 
 [start]
-cmd = "npm start"kgs = ["nodejs_18", "python3", "python3Packages.pip", "ffmpeg"]
-
-[phases.install]
-cmds = [
-  "npm ci",
-  "pip3 install --break-system-packages yt-dlp"
-]
-
-[phases.build]
-cmds = [
-  "npm run build",
-  "python3 --version",
-  "yt-dlp --version",
-  "ffmpeg -version"
-]
-
-[start]
 cmd = "npm start"

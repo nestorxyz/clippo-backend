@@ -1,10 +1,27 @@
 [phases.setup]
-nixPkgs = ["nodejs_18", "python3", "python3Packages.pip", "ffmpeg"]
+nixPkgs = ["nodejs_18", "python3", "python3Packages.pip", "ffmpeg", "python3Packages.yt-dlp"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = [
+  "npm run build",
+  "python3 --version",
+  "yt-dlp --version",
+  "ffmpeg -version"
+]
+
+[variables]
+NODE_ENV = "production"
+
+[start]
+cmd = "npm start"kgs = ["nodejs_18", "python3", "python3Packages.pip", "ffmpeg"]
 
 [phases.install]
 cmds = [
   "npm ci",
-  "pip3 install yt-dlp"
+  "pip3 install --break-system-packages yt-dlp"
 ]
 
 [phases.build]

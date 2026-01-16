@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import ffmpeg from 'fluent-ffmpeg';
-import { retired-providerAdmin } from '../config/retired-provider';
+import { convex, api } from '../config/convex';
 
 interface SocialMediaInfo {
   title: string;
@@ -230,33 +230,34 @@ export class SocialMediaService {
   }
 
   /**
-   * Upload thumbnail to retired-provider Storage
+   * Upload thumbnail to Convex Storage
    */
-  private async uploadThumbnail(
-    thumbnailPath: string,
-    fileName: string
-  ): Promise<string | null> {
+  private async uploadThumbnail(thumbnailPath: string): Promise<string | null> {
     try {
       const fileBuffer = await fs.readFile(thumbnailPath);
 
-      const { error } = await retired-providerAdmin.storage
-        .from('link-previews')
-        .upload(fileName, fileBuffer, {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
+      // 1. Generate upload URL
+      const uploadUrl = await convex.mutation(api.storage.generateUploadUrl);
 
-      if (error) {
-        console.error('Failed to upload thumbnail:', error);
-        return null;
+      // 2. Upload file to URL
+      const uploadResult = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/jpeg' },
+        body: fileBuffer,
+      });
+
+      if (!uploadResult.ok) {
+        throw new Error(`Upload failed: ${uploadResult.statusText}`);
       }
 
-      // Get public URL
-      const { data: publicData } = retired-providerAdmin.storage
-        .from('link-previews')
-        .getPublicUrl(fileName);
+      const { storageId } = (await uploadResult.json()) as any;
 
-      return publicData.publicUrl;
+      // 3. Get public URL
+      const publicUrl = await convex.query(api.storage.getPublicUrl, {
+        storageId,
+      });
+
+      return publicUrl;
     } catch (error) {
       console.error('Error uploading thumbnail:', error);
       return null;
@@ -421,11 +422,7 @@ export class SocialMediaService {
 
       // Upload thumbnail to retired-provider
       console.log('☁️ Uploading thumbnail...');
-      const thumbnailFileName = `social_${platform}_${timestamp}.jpg`;
-      const thumbnailUrl = await this.uploadThumbnail(
-        thumbnailPath,
-        thumbnailFileName
-      );
+      const thumbnailUrl = await this.uploadThumbnail(thumbnailPath);
 
       const result: SocialMediaInfo = {
         title: videoInfo.title || 'Untitled Video',

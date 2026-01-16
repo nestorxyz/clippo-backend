@@ -2,6 +2,7 @@ import { retired-providerAdmin } from '../config/retired-provider';
 import { ServiceResponse, ConsolidationData } from '../types';
 import { formatPhoneNumber } from '../utils/phone';
 import { Tables } from '../types/retired-provider';
+import { convex, api } from '../config/convex';
 
 type Profile = Tables<'profiles'>;
 
@@ -11,100 +12,31 @@ export class UserService {
    */
   async getOrCreateWhatsAppUser(
     phoneNumber: string
-  ): Promise<ServiceResponse<Profile>> {
+  ): Promise<ServiceResponse<any>> {
     try {
       const formattedPhone = formatPhoneNumber(phoneNumber);
 
-      // Check if user exists with this phone
-      const { data: existingProfile, error: _ } = await retired-providerAdmin
-        .from('profiles')
-        .select('*')
-        .eq('phone_number', formattedPhone)
-        .single();
+      // Call Convex to get/create profile and user
+      const result = await convex.mutation(api.profiles.getOrCreateByPhone, {
+        phoneNumber: formattedPhone,
+      });
 
-      if (existingProfile) {
-        // Update if not phone verified
-        if (!existingProfile.phone_verified) {
-          const { data: updatedProfile, error: updateError } =
-            await retired-providerAdmin
-              .from('profiles')
-              .update({
-                phone_verified: true,
-                phone_verified_at: new Date().toISOString(),
-              })
-              .eq('id', existingProfile.id)
-              .select()
-              .single();
+      const { profile, isNew } = result;
 
-          if (updateError) throw updateError;
-
-          return {
-            success: true,
-            data: updatedProfile!,
-            message: 'Existing user updated',
-          };
-        }
-
-        return {
-          success: true,
-          data: existingProfile,
-          message: 'Existing user found',
-        };
-      }
-
-      // Create new user if doesn't exist
-      // First create auth user
-      const { data: authData, error: authError } =
-        await retired-providerAdmin.auth.admin.createUser({
-          phone: formattedPhone,
-          phone_confirm: true,
-        });
-
-      if (authError) throw authError;
-
-      // Wait a bit for trigger to create profile
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Update profile with phone info
-      const { data: newProfile, error: profileError } = await retired-providerAdmin
-        .from('profiles')
-        .update({
-          phone_number: formattedPhone,
-          phone_verified: true,
-          phone_verified_at: new Date().toISOString(),
-          created_via: 'whatsapp',
-        })
-        .eq('id', authData.user.id)
-        .select()
-        .single();
-
-      if (profileError) {
-        // If update failed, try insert (in case trigger didn't fire)
-        const { data: insertedProfile, error: insertError } =
-          await retired-providerAdmin
-            .from('profiles')
-            .insert({
-              id: authData.user.id,
-              phone_number: formattedPhone,
-              phone_verified: true,
-              phone_verified_at: new Date().toISOString(),
-              created_via: 'whatsapp',
-            })
-            .select()
-            .single();
-
-        if (insertError) throw insertError;
-        return {
-          success: true,
-          data: insertedProfile!,
-          message: 'New WhatsApp user created',
-        };
-      }
+      // Map to expected structure. webhook.routes.ts expects user.id to be the User ID.
+      // In retired-provider, profile.id IS the user ID.
+      // In Convex, profile.userId is the User ID.
+      // We return the profile, but ensure 'id' property matches userId for compatibility
+      const mappedProfile = {
+        ...profile,
+        id: profile.userId,
+        // Add other fields if needed by Types
+      };
 
       return {
         success: true,
-        data: newProfile!,
-        message: 'New WhatsApp user created',
+        data: mappedProfile,
+        message: isNew ? 'New WhatsApp user created' : 'Existing user found',
       };
     } catch (error: any) {
       console.error('Get or create WhatsApp user error:', error);
@@ -339,9 +271,8 @@ export class UserService {
       if (phoneError) throw phoneError;
 
       // 9. Delete WhatsApp account
-      const { error: deleteError } = await retired-providerAdmin.auth.admin.deleteUser(
-        whatsappUserId
-      );
+      const { error: deleteError } =
+        await retired-providerAdmin.auth.admin.deleteUser(whatsappUserId);
       if (deleteError) {
         console.error('Failed to delete WhatsApp user:', deleteError);
         // Don't throw - profile deletion might fail but consolidation succeeded

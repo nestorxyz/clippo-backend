@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import fetch from 'node-fetch';
-import { retired-providerAdmin } from '../config/retired-provider';
+import { convex, api } from '../config/convex';
 
 type Job = {
   userId: string;
@@ -8,7 +8,6 @@ type Job = {
   sourceUrl: string;
 };
 
-const PREVIEW_BUCKET = 'link-previews';
 const MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const TIMEOUT_MS = 10_000;
 const QUALITY = 70; // WebP quality
@@ -39,7 +38,7 @@ async function drain(): Promise<void> {
 }
 
 async function processJob(job: Job): Promise<void> {
-  const { userId, linkId, sourceUrl } = job;
+  const { linkId, sourceUrl } = job;
   // Validate URL
   try {
     new URL(sourceUrl);
@@ -76,30 +75,43 @@ async function processJob(job: Job): Promise<void> {
       .webp({ quality: QUALITY })
       .toBuffer();
 
-    const path = `${userId}/${linkId}.webp`;
-    const { error: upErr } = await retired-providerAdmin.storage
-      .from(PREVIEW_BUCKET)
-      .upload(path, out, {
-        contentType: 'image/webp',
-        upsert: true,
-        cacheControl: '31536000',
-      });
-    if (upErr) return;
+    // 1. Generate upload URL
+    const uploadUrl = await convex.mutation(
+      api.storage.generateUploadUrlForBackend,
+      {
+        secret: process.env.CONVEX_BACKEND_SECRET,
+      },
+    );
 
-    const { data: pub } = retired-providerAdmin.storage
-      .from(PREVIEW_BUCKET)
-      .getPublicUrl(path);
-    const publicUrl = pub?.publicUrl;
-    if (!publicUrl) return;
-
-    // Update link record
-    const { error: updErr } = await retired-providerAdmin
-      .from('links')
-      .update({ img_preview: publicUrl })
-      .eq('id', linkId);
-    if (updErr) {
-      console.warn('thumbnail: failed to update link', updErr);
+    if (!uploadUrl) {
+      console.warn('thumbnail: failed to generate upload URL');
+      return;
     }
+
+    // 2. Upload file to Convex
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/webp' },
+      body: out,
+    });
+
+    if (!uploadRes.ok) {
+      console.warn('thumbnail: failed to upload to storage');
+      return;
+    }
+
+    const { storageId } = (await uploadRes.json()) as { storageId: string };
+    if (!storageId) return;
+
+    // 3. Construct public URL (served via our HTTP action)
+    const publicUrl = `${process.env.CONVEX_URL!.replace(/\/$/, '')}/images?id=${storageId}`;
+
+    // 4. Update link record
+    await convex.mutation(api.links.updateLinkPreviewForBackend, {
+      linkId: linkId as any,
+      imgPreview: publicUrl,
+      secret: process.env.CONVEX_BACKEND_SECRET,
+    });
   } finally {
     clearTimeout(timeout);
   }

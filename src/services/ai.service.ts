@@ -677,12 +677,12 @@ export class AIService {
    * Process chat message from WhatsApp user
    */
   async processWhatsAppMessage(
-    request: ChatRequest
+    request: ChatRequest,
   ): Promise<ServiceResponse<ChatResponse>> {
     try {
       // Get or create session for user
       const sessionResult = await sessionManager.getOrCreateSession(
-        request.userId
+        request.userId,
       );
 
       if (!sessionResult.success || !sessionResult.data) {
@@ -695,7 +695,7 @@ export class AIService {
         'User session ID:',
         request.userId,
         sessionId,
-        request.message
+        request.message,
       );
 
       // Use the new unified chat processing method
@@ -739,7 +739,7 @@ export class AIService {
   private ensureStartsWithUserMessage(contents: any[]): any[] {
     // Find the first user message
     const firstUserIndex = contents.findIndex(
-      (content) => content.role === 'user'
+      (content) => content.role === 'user',
     );
 
     if (firstUserIndex === -1) {
@@ -757,7 +757,7 @@ export class AIService {
     // Start conversation from first user message
     const trimmedContents = contents.slice(firstUserIndex);
     console.log(
-      `🔄 Trimmed conversation: ${contents.length} → ${trimmedContents.length} messages (started from first user message at index ${firstUserIndex})`
+      `🔄 Trimmed conversation: ${contents.length} → ${trimmedContents.length} messages (started from first user message at index ${firstUserIndex})`,
     );
 
     return trimmedContents;
@@ -777,9 +777,18 @@ export class AIService {
 
       // Get user's categories, subcategories, and tags using Convex
       const [categoriesData, subCategoriesData, tagsData] = await Promise.all([
-        convex.query(api.categories.getByUser, { userId }),
-        convex.query(api.subCategories.getByUser, { userId }),
-        convex.query(api.tags.getByUser, { userId }),
+        convex.query(api.categories.getByUser, {
+          userId,
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        }),
+        convex.query(api.subCategories.getByUser, {
+          userId,
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        }),
+        convex.query(api.tags.getByUser, {
+          userId,
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        }),
       ]);
 
       const categories =
@@ -798,14 +807,14 @@ export class AIService {
       const fromDate = new Date(
         lastMonth.getFullYear(),
         lastMonth.getMonth(),
-        1
+        1,
       )
         .toISOString()
         .split('T')[0];
       const toDate = new Date(
         lastMonth.getFullYear(),
         lastMonth.getMonth() + 1,
-        0
+        0,
       )
         .toISOString()
         .split('T')[0];
@@ -839,7 +848,7 @@ export class AIService {
       // Create system instruction with user's data
       const systemInstruction = CHAT_SYSTEM_PROMPT.replace(
         '{categories}',
-        categories
+        categories,
       )
         .replace('{subcategories}', subcategories)
         .replace('{tags}', tags)
@@ -857,6 +866,7 @@ export class AIService {
         sessionId: sessionId as any, // Cast to any to bypass strict ID typing here if needed, or string
         role: 'user',
         parts: [{ text: message }],
+        secret: process.env.CONVEX_BACKEND_SECRET,
       });
 
       // Get chat history from Convex (fetch 40 messages)
@@ -890,11 +900,11 @@ export class AIService {
       // Temporary:
       const historyDataRaw = await convex.query(
         api.chat.getMessagesForBackend,
-        { sessionId: sessionId as any }
+        { sessionId: sessionId as any },
       );
 
       console.log(
-        `📚 Retrieved ${historyDataRaw.length} messages from chat history`
+        `📚 Retrieved ${historyDataRaw.length} messages from chat history`,
       );
 
       // Debug: Count messages by role
@@ -903,7 +913,7 @@ export class AIService {
           acc[msg.role] = (acc[msg.role] || 0) + 1;
           return acc;
         },
-        {}
+        {},
       );
       console.log(`📊 Message counts by role:`, roleCounts);
 
@@ -925,7 +935,7 @@ export class AIService {
         console.log(
           `   ${index}: role=${content.role}, parts count=${
             Array.isArray(content.parts) ? content.parts.length : 'not array'
-          }`
+          }`,
         );
       });
 
@@ -952,23 +962,23 @@ export class AIService {
                 console.log(
                   `    Part ${partIndex}: text - "${part.text.substring(
                     0,
-                    100
-                  )}${part.text.length > 100 ? '...' : ''}"`
+                    100,
+                  )}${part.text.length > 100 ? '...' : ''}"`,
                 );
               } else if (part.functionCall) {
                 console.log(
                   `    Part ${partIndex}: functionCall - ${
                     part.functionCall.name
-                  }(${JSON.stringify(part.functionCall.args)})`
+                  }(${JSON.stringify(part.functionCall.args)})`,
                 );
               } else if (part.functionResponse) {
                 console.log(
-                  `    Part ${partIndex}: functionResponse - ${part.functionResponse.name}`
+                  `    Part ${partIndex}: functionResponse - ${part.functionResponse.name}`,
                 );
               } else {
                 console.log(
                   `    Part ${partIndex}: unknown type -`,
-                  Object.keys(part)
+                  Object.keys(part),
                 );
               }
             });
@@ -995,7 +1005,7 @@ export class AIService {
             console.log(
               `  [${i}→${
                 i + 1
-              }] model→model: current has functionCall: ${currentHasFunctionCall}, next has functionCall: ${nextHasFunctionCall}`
+              }] model→model: current has functionCall: ${currentHasFunctionCall}, next has functionCall: ${nextHasFunctionCall}`,
             );
           }
         }
@@ -1007,7 +1017,7 @@ export class AIService {
           if (lastContent.role === 'function') {
             console.log(
               `🔧 Function responses available to AI:`,
-              JSON.stringify(lastContent.parts, null, 2)
+              JSON.stringify(lastContent.parts, null, 2),
             );
           }
         }
@@ -1027,7 +1037,7 @@ export class AIService {
           functionCalls.forEach((fc, index) => {
             console.log(
               `   ${index + 1}. ${fc.name} with args:`,
-              JSON.stringify(fc.args, null, 2)
+              JSON.stringify(fc.args, null, 2),
             );
           });
 
@@ -1040,6 +1050,7 @@ export class AIService {
             sessionId: sessionId as any,
             role: 'model',
             parts: functionCallParts,
+            secret: process.env.CONVEX_BACKEND_SECRET,
           });
 
           contents.push({ role: 'model', parts: functionCallParts as any });
@@ -1062,7 +1073,7 @@ export class AIService {
             } else if (fc.name === 'get_url_info') {
               functionResponse = await this.getUrlInfo(
                 fc.args?.url as string,
-                fc.args?.focus as string
+                fc.args?.focus as string,
               );
 
               console.log(`🔍 URL info retrieved:`, functionResponse);
@@ -1089,6 +1100,7 @@ export class AIService {
             sessionId: sessionId as any,
             role: 'function',
             parts: functionResponseParts,
+            secret: process.env.CONVEX_BACKEND_SECRET,
           });
           console.log(`✅ Function responses saved successfully`);
 
@@ -1105,6 +1117,7 @@ export class AIService {
               sessionId: sessionId as any,
               role: 'model',
               parts: [{ text: botReply }],
+              secret: process.env.CONVEX_BACKEND_SECRET,
             });
           }
         }
@@ -1132,7 +1145,7 @@ export class AIService {
    * Process quick save link with direct AI analysis and categorization
    */
   async processQuickSaveLink(
-    request: QuickSaveLinkRequest
+    request: QuickSaveLinkRequest,
   ): Promise<ServiceResponse<QuickSaveLinkResponse>> {
     try {
       const { url, title, description, userId } = request;
@@ -1159,7 +1172,7 @@ export class AIService {
       // Create system prompt with user's data
       const systemPrompt = LINK_SAVING_SYSTEM_PROMPT.replace(
         '{categories}',
-        categories
+        categories,
       )
         .replace('{subcategories}', subcategories)
         .replace('{tags}', tags);
@@ -1213,7 +1226,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
             if (fc.name === 'get_url_info') {
               urlInfo = await this.getUrlInfo(
                 fc.args?.url as string,
-                fc.args?.focus as string
+                fc.args?.focus as string,
               );
               functionResponse = urlInfo;
             } else if (fc.name === 'register_link') {
@@ -1251,7 +1264,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
 
       if (!linkResult || !linkResult.success) {
         throw new Error(
-          `Failed to save link: ${linkResult?.error || 'Unknown error'}`
+          `Failed to save link: ${linkResult?.error || 'Unknown error'}`,
         );
       }
 
@@ -1287,7 +1300,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
       // Check if this is a social media URL that needs special processing
       if (socialMediaService.isSocialMediaUrl(url)) {
         console.log(
-          '🎬 Detected social media URL, processing with enhanced extraction...'
+          '🎬 Detected social media URL, processing with enhanced extraction...',
         );
 
         const socialResult =
@@ -1352,7 +1365,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
           };
         } else {
           console.log(
-            '🔄 Social media processing failed, falling back to standard method'
+            '🔄 Social media processing failed, falling back to standard method',
           );
           // Fall back to standard processing if social media processing fails
         }
@@ -1372,10 +1385,10 @@ Execute the two-step process to analyze and save this link with appropriate cate
         // Simple regex to extract basic metadata
         const titleMatch = html.match(/<title>(.*?)<\/title>/i);
         const descMatch = html.match(
-          /<meta[^>]*property="og:description"[^>]*content="([^"]*)"[^>]*>/i
+          /<meta[^>]*property="og:description"[^>]*content="([^"]*)"[^>]*>/i,
         );
         const imageMatch = html.match(
-          /<meta[^>]*property="og:image"[^>]*content="([^"]*)"[^>]*>/i
+          /<meta[^>]*property="og:image"[^>]*content="([^"]*)"[^>]*>/i,
         );
 
         ogMetadata = {
@@ -1447,7 +1460,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
               : `⚠️ You've reached your current subscription period limit (${
                   plan.limit
                 }). It resets on ${new Date(plan.period.end).toLocaleDateString(
-                  'en-US'
+                  'en-US',
                 )} (UTC).`;
           return {
             success: false,
@@ -1468,6 +1481,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
         category: category_name,
         subcategory,
         tags,
+        secret: process.env.CONVEX_BACKEND_SECRET,
         source,
         img_preview,
         content,
@@ -1479,7 +1493,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
 
       console.log(
         '🎉 Link registration completed successfully!',
-        result.linkId
+        result.linkId,
       );
 
       // If we have a remote preview, enqueue background thumbnail processing
@@ -1489,7 +1503,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
           linkId: result.linkId,
           sourceUrl: img_preview,
         }).catch((e: unknown) =>
-          console.warn('enqueueThumbnailJob failed:', e)
+          console.warn('enqueueThumbnailJob failed:', e),
         );
       }
 
@@ -1505,12 +1519,13 @@ Execute the two-step process to analyze and save this link with appropriate cate
    */
   async getUserRecentLinks(
     userId: string,
-    limit: number = 10
+    limit: number = 10,
   ): Promise<ServiceResponse<any[]>> {
     try {
       const links = await convex.query(api.links.getRecentLinksForUser, {
         userId: userId as any,
         limit,
+        secret: process.env.CONVEX_BACKEND_SECRET,
       });
 
       return {
@@ -1533,7 +1548,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
    */
   async getSessionMessages(
     sessionId: string,
-    limit: number = 10
+    limit: number = 10,
   ): Promise<any[]> {
     // Changed return type to any[] for now as ChatMessage type might differ
     try {

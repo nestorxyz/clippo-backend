@@ -18,9 +18,11 @@ export const api: any = {
   links: {
     registerLinkForBackend: 'links:registerLinkForBackend',
     getRecentLinksForUser: 'links:getRecentLinksForUser',
+    updateLinkPreviewForBackend: 'links:updateLinkPreviewForBackend',
   },
   storage: {
     generateUploadUrl: 'storage:generateUploadUrl',
+    generateUploadUrlForBackend: 'storage:generateUploadUrlForBackend',
     getPublicUrl: 'storage:getPublicUrl',
   },
   profiles: {

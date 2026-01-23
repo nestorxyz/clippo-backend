@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { WhatsAppOTPTemplate, ServiceResponse } from '../types';
+import { ServiceResponse } from '../types';
 
 export class WhatsAppService {
   private readonly accessToken: string;
@@ -19,74 +19,9 @@ export class WhatsAppService {
     this.graphApiUrl = `https://graph.facebook.com/v21.0/${this.phoneNumberId}/messages`;
   }
 
-  async sendOTP(
-    phoneNumber: string,
-    otpCode: string
-  ): Promise<ServiceResponse> {
-    try {
-      const template: WhatsAppOTPTemplate = {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: phoneNumber,
-        type: 'template',
-        template: {
-          name: 'verify_code',
-          language: {
-            code: 'en_US',
-          },
-          components: [
-            {
-              type: 'body',
-              parameters: [
-                {
-                  type: 'text',
-                  text: otpCode,
-                },
-              ],
-            },
-            {
-              type: 'button',
-              sub_type: 'url',
-              index: '0',
-              parameters: [
-                {
-                  type: 'text',
-                  text: otpCode,
-                },
-              ],
-            },
-          ],
-        },
-      };
-
-      const response = await axios.post(this.graphApiUrl, template, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.accessToken}`,
-        },
-      });
-
-      return {
-        success: true,
-        data: response.data,
-        message: 'OTP sent successfully',
-      };
-    } catch (error: any) {
-      console.error(
-        'WhatsApp send OTP error:',
-        error.response?.data || error.message
-      );
-      return {
-        success: false,
-        error: error.response?.data?.error?.message || 'Failed to send OTP',
-        message: 'Error sending WhatsApp message',
-      };
-    }
-  }
-
   async sendTextMessage(
     phoneNumber: string,
-    message: string
+    message: string,
   ): Promise<ServiceResponse> {
     try {
       const payload = {
@@ -115,7 +50,7 @@ export class WhatsAppService {
     } catch (error: any) {
       console.error(
         'WhatsApp send message error:',
-        error.response?.data || error.message
+        error.response?.data || error.message,
       );
       return {
         success: false,

@@ -17,12 +17,6 @@ export interface ServiceResponse<T = any> {
   message?: string;
 }
 
-// Special consolidation response data
-export interface ConsolidationData {
-  requiresConsolidation: boolean;
-  whatsappAccountId: string;
-}
-
 // WhatsApp webhook types
 export interface WhatsAppWebhookBody {
   object: string;
@@ -54,27 +48,4 @@ export interface WhatsAppWebhookBody {
       field: string;
     }>;
   }>;
-}
-
-// WhatsApp message template types
-export interface WhatsAppOTPTemplate {
-  messaging_product: 'whatsapp';
-  recipient_type: 'individual';
-  to: string;
-  type: 'template';
-  template: {
-    name: string;
-    language: {
-      code: string;
-    };
-    components: Array<{
-      type: 'body' | 'button';
-      sub_type?: string;
-      index?: string;
-      parameters: Array<{
-        type: 'text';
-        text: string;
-      }>;
-    }>;
-  };
 }

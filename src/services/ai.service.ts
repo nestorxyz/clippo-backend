@@ -41,7 +41,7 @@ if (!GEMINI_API_KEY) {
 const genAI = new GoogleGenAI({
   apiKey: GEMINI_API_KEY,
 });
-const modelName = 'gemini-2.5-flash-preview-05-20';
+const modelName = 'gemini-2.5-flash-lite';
 
 // System prompt template for direct link saving
 const LINK_SAVING_SYSTEM_PROMPT = `# 🔗 Link Analysis and Categorization Specialist

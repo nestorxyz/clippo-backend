@@ -6,10 +6,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 
 // Import routes
-import authRoutes from './routes/auth.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
-import linksRoutes from './routes/links.routes.js';
-import billingRoutes from './routes/billing.routes.js';
 import lemonRoutes from './routes/lemon.routes.js';
 import chatRoutes from './routes/chat.routes.js';
 
@@ -35,7 +32,7 @@ app.use(
       'http://192.168.18.82:8080', // Your local IP
     ],
     credentials: true,
-  })
+  }),
 );
 
 // Logging middleware
@@ -58,12 +55,9 @@ app.get('/health', (_, res) => {
 });
 
 // API routes
-app.use('/api/auth', authRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/webhooks', lemonRoutes); // /api/webhooks/lemon
-app.use('/api/billing', billingRoutes);
-app.use('/api/links', linksRoutes);
 app.use('/api/chat', chatRoutes);
 
 // Error handling middleware (must be last)
@@ -101,6 +95,6 @@ app.listen(PORT, () => {
   console.log(`🌐 Local:    http://localhost:${PORT}`);
   console.log(`🌐 Network:  http://${localIP}:${PORT}`);
   console.log(
-    `🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`
+    `🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`,
   );
 });

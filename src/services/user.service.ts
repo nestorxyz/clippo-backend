@@ -15,6 +15,7 @@ export class UserService {
       // Call Convex to get/create profile and user
       const result = await convex.mutation(api.profiles.getOrCreateByPhone, {
         phoneNumber: formattedPhone,
+        secret: process.env.CONVEX_BACKEND_SECRET,
       });
 
       const { profile, isNew } = result;

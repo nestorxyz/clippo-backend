@@ -45,7 +45,7 @@ export class SocialMediaService {
 
       python.on('error', () => {
         console.log(
-          '⚠️ Python3 not available, using fallback mode for social media processing'
+          '⚠️ Python3 not available, using fallback mode for social media processing',
         );
         this.isProductionWithoutPython = true;
       });
@@ -53,14 +53,14 @@ export class SocialMediaService {
       python.on('close', (code: number) => {
         if (code !== 0) {
           console.log(
-            '⚠️ Python3 check failed, using fallback mode for social media processing'
+            '⚠️ Python3 check failed, using fallback mode for social media processing',
           );
           this.isProductionWithoutPython = true;
         }
       });
     } catch (error) {
       console.log(
-        '⚠️ Unable to check Python availability, using fallback mode'
+        '⚠️ Unable to check Python availability, using fallback mode',
       );
       this.isProductionWithoutPython = true;
     }
@@ -113,7 +113,7 @@ export class SocialMediaService {
         if (error.code !== 'ENOENT') {
           console.warn(
             `⚠️ Failed to delete temp file ${filePath}:`,
-            error.message
+            error.message,
           );
         }
         // ENOENT means file doesn't exist, which is fine - no need to warn
@@ -127,7 +127,7 @@ export class SocialMediaService {
    */
   private async extractAudio(
     videoPath: string,
-    audioPath: string
+    audioPath: string,
   ): Promise<void> {
     // Try multiple audio extraction approaches
     const methods = [
@@ -138,14 +138,14 @@ export class SocialMediaService {
         this.extractAudioWithCodec(
           videoPath,
           audioPath.replace('.mp3', '.aac'),
-          'aac'
+          'aac',
         ),
       // Method 3: copy audio stream (fastest, no re-encoding)
       () =>
         this.extractAudioWithCodec(
           videoPath,
           audioPath.replace('.mp3', '.aac'),
-          'copy'
+          'copy',
         ),
     ];
 
@@ -159,7 +159,7 @@ export class SocialMediaService {
         console.log(`🎵 Method ${i + 1} failed:`, error);
         if (i === methods.length - 1) {
           throw new Error(
-            `All audio extraction methods failed. Last error: ${error}`
+            `All audio extraction methods failed. Last error: ${error}`,
           );
         }
       }
@@ -172,7 +172,7 @@ export class SocialMediaService {
   private async extractAudioWithCodec(
     videoPath: string,
     audioPath: string,
-    codec: string
+    codec: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const command = ffmpeg(videoPath).output(audioPath);
@@ -195,7 +195,7 @@ export class SocialMediaService {
         .on('progress', (progress) => {
           if (progress.percent) {
             console.log(
-              `🎵 Audio extraction progress: ${Math.round(progress.percent)}%`
+              `🎵 Audio extraction progress: ${Math.round(progress.percent)}%`,
             );
           }
         })
@@ -208,7 +208,7 @@ export class SocialMediaService {
    */
   private async extractThumbnail(
     videoPath: string,
-    thumbnailPath: string
+    thumbnailPath: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       ffmpeg(videoPath)
@@ -237,7 +237,12 @@ export class SocialMediaService {
       const fileBuffer = await fs.readFile(thumbnailPath);
 
       // 1. Generate upload URL
-      const uploadUrl = await convex.mutation(api.storage.generateUploadUrl);
+      const uploadUrl = await convex.mutation(
+        api.storage.generateUploadUrlForBackend,
+        {
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        },
+      );
 
       // 2. Upload file to URL
       const uploadResult = await fetch(uploadUrl, {
@@ -255,6 +260,7 @@ export class SocialMediaService {
       // 3. Get public URL
       const publicUrl = await convex.query(api.storage.getPublicUrl, {
         storageId,
+        secret: process.env.CONVEX_BACKEND_SECRET,
       });
 
       return publicUrl;
@@ -323,7 +329,7 @@ export class SocialMediaService {
 
       const transcript = result.text || '';
       console.log(
-        `🎤 Transcription completed (${transcript.length} characters)`
+        `🎤 Transcription completed (${transcript.length} characters)`,
       );
       return transcript;
     } catch (error) {
@@ -344,7 +350,7 @@ export class SocialMediaService {
     // Check if Python is available for yt-dlp
     if (this.isProductionWithoutPython) {
       console.log(
-        '⚠️ Python not available, using fallback social media processing'
+        '⚠️ Python not available, using fallback social media processing',
       );
       return this.processSocialMediaFallback(url, platform);
     }
@@ -361,7 +367,7 @@ export class SocialMediaService {
       const baseAudioPath = path.join(this.tempDir, `audio_${timestamp}`);
       const thumbnailPath = path.join(
         this.tempDir,
-        `thumbnail_${timestamp}.jpg`
+        `thumbnail_${timestamp}.jpg`,
       );
 
       tempFiles = [videoPath, thumbnailPath]; // We'll add audio file later when we know the extension
@@ -391,7 +397,7 @@ export class SocialMediaService {
           format: 'best[ext=mp4]/best',
         }),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Download timeout')), 60000)
+          setTimeout(() => reject(new Error('Download timeout')), 60000),
         ),
       ]);
 
@@ -453,7 +459,7 @@ export class SocialMediaService {
    */
   private async processSocialMediaFallback(
     url: string,
-    platform: 'instagram' | 'tiktok'
+    platform: 'instagram' | 'tiktok',
   ): Promise<ProcessingResult> {
     console.log(`🔄 Using fallback processing for ${platform} URL`);
 
@@ -485,7 +491,7 @@ export class SocialMediaService {
    */
   private generateFallbackTitle(
     url: string,
-    platform: 'instagram' | 'tiktok'
+    platform: 'instagram' | 'tiktok',
   ): string {
     if (platform === 'instagram') {
       const match = url.match(/\/reel\/([A-Za-z0-9_-]+)/);

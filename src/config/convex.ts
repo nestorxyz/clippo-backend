@@ -21,7 +21,6 @@ export const api: any = {
     updateLinkPreviewForBackend: 'links:updateLinkPreviewForBackend',
   },
   storage: {
-    generateUploadUrl: 'storage:generateUploadUrl',
     generateUploadUrlForBackend: 'storage:generateUploadUrlForBackend',
     getPublicUrl: 'storage:getPublicUrl',
   },

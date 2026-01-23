@@ -13,6 +13,7 @@ export const api: any = {
   chat: {
     saveMessage: 'chat:saveMessage',
     getMessagesForBackend: 'chat:getMessagesForBackend',
+    getOrCreateSessionForBackend: 'chat:getOrCreateSessionForBackend',
   },
   links: {
     registerLinkForBackend: 'links:registerLinkForBackend',
@@ -25,5 +26,8 @@ export const api: any = {
   profiles: {
     getByPhoneNumber: 'profiles:getByPhoneNumber',
     getOrCreateByPhone: 'profiles:getOrCreateByPhone',
+  },
+  billing: {
+    getPlanForBackend: 'billing:getPlanForBackend',
   },
 };

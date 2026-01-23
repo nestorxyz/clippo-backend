@@ -1450,10 +1450,12 @@ Execute the two-step process to analyze and save this link with appropriate cate
 
       // Quota enforcement (friendly message)
       try {
-        const { subscriptionService } =
-          await import('./subscription.service.js');
-        const plan = await subscriptionService.getEnrichedPlan(userId);
-        if (plan.used >= plan.limit) {
+        const plan: any = await convex.query(api.billing.getPlanForBackend, {
+          userId: userId as any,
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        });
+
+        if (plan && plan.used >= plan.limit) {
           const upgradeMsg =
             plan.plan === 'free'
               ? `🚀 Free plan limit reached (${plan.limit} links). Upgrade to Premium for 200 links each period and unlimited organization power.`

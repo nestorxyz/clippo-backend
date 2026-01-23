@@ -900,7 +900,10 @@ export class AIService {
       // Temporary:
       const historyDataRaw = await convex.query(
         api.chat.getMessagesForBackend,
-        { sessionId: sessionId as any },
+        {
+          sessionId: sessionId,
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        },
       );
 
       console.log(

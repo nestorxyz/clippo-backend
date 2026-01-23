@@ -1,6 +1,5 @@
-import { Router, Response } from 'express';
+import { Router, Response, Request, NextFunction } from 'express';
 import { aiService } from '../services/ai.service.js';
-import { authenticateSupabaseToken } from '../middleware/auth.middleware.js';
 import { AuthRequest } from '../types/index.js';
 
 const router = Router();
@@ -9,14 +8,45 @@ interface ChatRequest {
   message: string;
   sessionId: string;
   timeZone?: string;
+  userId?: string; // Added userId for service auth
 }
 
 /**
  * Process chat message - endpoint for web app (replaces edge function)
+ * Authenticated via Service Secret (from Convex) only.
+ * No Supabase Auth (JWT) is used here.
  */
 router.post(
   '/',
-  authenticateSupabaseToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    // 1. Verify Service Secret (Server-to-Server Trust)
+    const serviceSecret = req.header('x-convex-backend-secret');
+
+    if (!serviceSecret || serviceSecret !== process.env.CONVEX_BACKEND_SECRET) {
+      console.warn(
+        '❌ Unauthorized access attempt to /chat: Invalid or missing secret',
+      );
+      return res
+        .status(401)
+        .json({ error: 'Unauthorized: Invalid Service Secret' });
+    }
+
+    // 2. Validate User Context (Trusting the caller provided the correct ID)
+    if (!req.body || !req.body.userId) {
+      return res
+        .status(400)
+        .json({ error: 'userId is required for service auth' });
+    }
+
+    // 3. Mock the User Object for the Controller
+    (req as unknown as AuthRequest).user = {
+      id: req.body.userId,
+      phoneNumber: '', // Not needed for web chat
+      phoneVerified: true,
+    };
+
+    return next();
+  },
   async (req: AuthRequest, res: Response) => {
     try {
       const { message, sessionId, timeZone } = req.body as ChatRequest;
@@ -47,7 +77,6 @@ router.post(
         });
       }
 
-      // Return same format as edge function for compatibility
       return res.json({
         reply: result.data?.reply,
         functionCalls: result.data?.functionCalls || [],
@@ -58,7 +87,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 export default router;

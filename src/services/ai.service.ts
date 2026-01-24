@@ -1488,7 +1488,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
         tags,
         secret: process.env.CONVEX_BACKEND_SECRET,
         source,
-        img_preview,
+        imgPreview: img_preview,
         content,
       });
 

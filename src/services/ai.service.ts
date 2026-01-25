@@ -791,6 +791,10 @@ export class AIService {
         }),
       ]);
 
+      console.log('Categories:', categoriesData);
+      console.log('Subcategories:', subCategoriesData);
+      console.log('Tags:', tagsData);
+
       const categories =
         categoriesData?.map((c: any) => c.name).join('\n- ') ||
         'personal\n- work\n- research\n- side-projects\n- girlfriend';

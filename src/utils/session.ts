@@ -16,6 +16,7 @@ export class SessionManager {
    */
   async getOrCreateSession(
     userId: string,
+    source: string = 'web',
   ): Promise<ServiceResponse<{ sessionId: string; session: ChatSession }>> {
     try {
       const session = await convex.mutation(
@@ -23,6 +24,7 @@ export class SessionManager {
         {
           userId,
           secret: process.env.CONVEX_BACKEND_SECRET,
+          source,
         },
       );
 

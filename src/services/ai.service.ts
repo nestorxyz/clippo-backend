@@ -683,6 +683,7 @@ export class AIService {
       // Get or create session for user
       const sessionResult = await sessionManager.getOrCreateSession(
         request.userId,
+        'whatsapp',
       );
 
       if (!sessionResult.success || !sessionResult.data) {

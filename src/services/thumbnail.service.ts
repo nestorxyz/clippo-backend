@@ -104,7 +104,7 @@ async function processJob(job: Job): Promise<void> {
     if (!storageId) return;
 
     // 3. Construct public URL (served via our HTTP action)
-    const publicUrl = `${process.env.CONVEX_URL!.replace(/\/$/, '')}/images?id=${storageId}`;
+    const publicUrl = `${process.env.CONVEX_URL!.replace(/\/$/, '').replace('cloud', 'site')}/images?id=${storageId}`;
 
     // 4. Update link record
     await convex.mutation(api.links.updateLinkPreviewForBackend, {

@@ -4,6 +4,7 @@ import { WhatsAppWebhookBody } from '../types';
 import { userService } from '../services/user.service.js';
 import { aiService } from '../services/ai.service.js';
 import { whatsappService } from '../services/whatsapp.service.js';
+import { aggregatorService } from '../services/aggregator.service.js';
 import { formatPhoneNumber } from '../utils/phone';
 
 const router = Router();
@@ -69,91 +70,115 @@ router.post(
 
               const phoneNumber = formatPhoneNumber(message.from);
               const messageText = message.text.body;
+              const rawFrom = message.from;
+
+              // Check for duplicate message IDs (Meta retries)
+              if (aggregatorService.isDuplicate(message.id)) {
+                console.log(
+                  `[Webhook] Duplicate message ID detected, skipping: ${message.id}`
+                );
+                continue;
+              }
 
               console.log(
-                `Received message from ${phoneNumber}: ${messageText}`
+                `[Webhook] Received message from ${phoneNumber}: ${messageText}`
               );
 
-              // Forward to Assistant Bot if it's from the admin number (51989009435)
-              if (phoneNumber === '51989009435' || message.from === '51989009435') {
-                const assistantUrl = `${process.env.ASSISTANT_BOT_URL}/api/assistant`;
-                const token = process.env.WHATSAPP_VERIFY_TOKEN;
+              // Use aggregator to handle rapid-fire messages (Option A)
+              aggregatorService.aggregate(
+                rawFrom,
+                messageText,
+                async (aggregatedText) => {
+                  try {
+                    // Forward to Assistant Bot if it's from the admin number (51989009435)
+                    if (
+                      phoneNumber === '51989009435' ||
+                      rawFrom === '51989009435'
+                    ) {
+                      const assistantUrl = `${process.env.ASSISTANT_BOT_URL}/api/assistant`;
+                      const token = process.env.WHATSAPP_VERIFY_TOKEN;
 
-                console.log(`Forwarding message to Assistant Bot: ${assistantUrl}`);
+                      console.log(
+                        `[Webhook] Forwarding aggregated message to Assistant Bot: ${assistantUrl}`
+                      );
 
-                axios
-                  .post(
-                    assistantUrl,
-                    {
-                      senderId: message.from,
-                      text: messageText,
-                    },
-                    {
-                      headers: {
-                        Authorization: `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                      },
+                      await axios.post(
+                        assistantUrl,
+                        {
+                          senderId: rawFrom,
+                          text: aggregatedText,
+                        },
+                        {
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                          },
+                        }
+                      );
+                      console.log(
+                        '✅ Aggregated message forwarded to Assistant Bot successfully.'
+                      );
+                      return;
                     }
-                  )
-                  .then(() => {
-                    console.log('✅ Message forwarded to Assistant Bot successfully.');
-                  })
-                  .catch((error) => {
+
+                    // Regular processing for other users
+                    // Get or create user
+                    const userResult =
+                      await userService.getOrCreateWhatsAppUser(phoneNumber);
+
+                    if (!userResult.success || !userResult.data) {
+                      console.error(
+                        '[Webhook] Failed to get/create user:',
+                        userResult.error
+                      );
+                      await whatsappService.sendTextMessage(
+                        phoneNumber,
+                        'Sorry, I encountered an error. Please try again later.'
+                      );
+                      return;
+                    }
+
+                    const user = userResult.data;
+
+                    // Process message with AI
+                    const aiResult = await aiService.processWhatsAppMessage({
+                      message: aggregatedText,
+                      phoneNumber: phoneNumber,
+                      userId: user.id,
+                    });
+
+                    if (!aiResult.success || !aiResult.data) {
+                      console.error(
+                        '[Webhook] AI processing failed:',
+                        aiResult.error
+                      );
+                      await whatsappService.sendTextMessage(
+                        phoneNumber,
+                        "Sorry, I couldn't process your message. Please try again."
+                      );
+                      return;
+                    }
+
+                    // Send AI response
+                    const sendResult = await whatsappService.sendTextMessage(
+                      phoneNumber,
+                      aiResult.data.reply
+                    );
+
+                    if (!sendResult.success) {
+                      console.error(
+                        '[Webhook] Failed to send WhatsApp response:',
+                        sendResult.error
+                      );
+                    }
+                  } catch (error: any) {
                     console.error(
-                      '❌ Error forwarding message to Assistant Bot:',
+                      '[Webhook] Error in aggregated processing:',
                       error.message
                     );
-                  });
-
-                // Skip regular processing for the admin number
-                continue;
-              }
-
-              // Get or create user
-              const userResult = await userService.getOrCreateWhatsAppUser(
-                phoneNumber
+                  }
+                }
               );
-
-              if (!userResult.success || !userResult.data) {
-                console.error('Failed to get/create user:', userResult.error);
-                // Send error message to user
-                await whatsappService.sendTextMessage(
-                  phoneNumber,
-                  'Sorry, I encountered an error. Please try again later.'
-                );
-                continue;
-              }
-
-              const user = userResult.data;
-
-              // Process message with AI
-              const aiResult = await aiService.processWhatsAppMessage({
-                message: messageText,
-                phoneNumber: phoneNumber,
-                userId: user.id,
-              });
-
-              if (!aiResult.success || !aiResult.data) {
-                console.error('AI processing failed:', aiResult.error);
-                await whatsappService.sendTextMessage(
-                  phoneNumber,
-                  "Sorry, I couldn't process your message. Please try again."
-                );
-                continue;
-              }
-
-              // Send AI response
-              const sendResult = await whatsappService.sendTextMessage(
-                phoneNumber,
-                aiResult.data.reply
-              );
-
-              if (!sendResult.success) {
-                console.error(
-                  'Failed to send WhatsApp message:',
-                  sendResult.error
-                );
-              }
             }
           }
         }

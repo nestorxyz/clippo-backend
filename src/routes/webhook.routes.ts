@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import axios from 'axios';
 import { WhatsAppWebhookBody } from '../types';
 import { userService } from '../services/user.service.js';
 import { aiService } from '../services/ai.service.js';
@@ -72,6 +73,41 @@ router.post(
               console.log(
                 `Received message from ${phoneNumber}: ${messageText}`
               );
+
+              // Forward to Assistant Bot if it's from the admin number (51989009435)
+              if (phoneNumber === '51989009435' || message.from === '51989009435') {
+                const assistantUrl = `${process.env.ASSISTANT_BOT_URL}/api/assistant`;
+                const token = process.env.WHATSAPP_VERIFY_TOKEN;
+
+                console.log(`Forwarding message to Assistant Bot: ${assistantUrl}`);
+
+                axios
+                  .post(
+                    assistantUrl,
+                    {
+                      senderId: message.from,
+                      text: messageText,
+                    },
+                    {
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                      },
+                    }
+                  )
+                  .then(() => {
+                    console.log('✅ Message forwarded to Assistant Bot successfully.');
+                  })
+                  .catch((error) => {
+                    console.error(
+                      '❌ Error forwarding message to Assistant Bot:',
+                      error.message
+                    );
+                  });
+
+                // Skip regular processing for the admin number
+                continue;
+              }
 
               // Get or create user
               const userResult = await userService.getOrCreateWhatsAppUser(

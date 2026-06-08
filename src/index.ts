@@ -6,7 +6,6 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 
 // Import routes
-import webhookRoutes from './routes/webhook.routes.js';
 import chatRoutes from './routes/chat.routes.js';
 
 dotenv.config();
@@ -51,7 +50,6 @@ app.get('/health', (_, res) => {
 });
 
 // API routes
-app.use('/api/webhooks', webhookRoutes);
 app.use('/api/chat', chatRoutes);
 
 // Error handling middleware (must be last)

@@ -6,17 +6,6 @@ import { sessionManager } from '../utils/session';
 import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
 import fetch from 'node-fetch';
 
-interface ChatRequest {
-  message: string;
-  phoneNumber: string;
-  userId: string;
-}
-
-interface ChatResponse {
-  reply: string;
-  sessionId: string;
-}
-
 interface QuickSaveLinkRequest {
   url: string;
   title?: string;
@@ -673,66 +662,6 @@ Use this tool automatically if the user provides a link and expects content-base
 `;
 
 export class AIService {
-  /**
-   * Process chat message from WhatsApp user
-   */
-  async processWhatsAppMessage(
-    request: ChatRequest,
-  ): Promise<ServiceResponse<ChatResponse>> {
-    try {
-      // Get or create session for user
-      const sessionResult = await sessionManager.getOrCreateSession(
-        request.userId,
-        'whatsapp',
-      );
-
-      if (!sessionResult.success || !sessionResult.data) {
-        throw new Error('Failed to get session');
-      }
-
-      const sessionId = sessionResult.data.sessionId;
-
-      console.log(
-        'User session ID:',
-        request.userId,
-        sessionId,
-        request.message,
-      );
-
-      // Use the new unified chat processing method
-      const chatResult = await this.processChatMessage({
-        message: request.message,
-        sessionId: sessionId,
-        timeZone: 'UTC',
-        userId: request.userId,
-      });
-
-      if (!chatResult.success || !chatResult.data) {
-        throw new Error(chatResult.error || 'Failed to process chat message');
-      }
-
-      const aiReply =
-        chatResult.data.reply ||
-        "I couldn't process your request. Please try again.";
-
-      return {
-        success: true,
-        data: {
-          reply: aiReply,
-          sessionId,
-        },
-        message: 'Message processed successfully',
-      };
-    } catch (error: any) {
-      console.error('AI processing error:', error);
-      return {
-        success: false,
-        error: error.message,
-        message: 'Failed to process message',
-      };
-    }
-  }
-
   /**
    * Ensure conversation starts with a user message for valid Gemini API flow
    * Finds the first user message and returns conversation from that point

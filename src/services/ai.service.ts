@@ -2,7 +2,7 @@ import { convex, api } from '../config/convex'; // Added Convex import
 import { enqueueThumbnailJob } from './thumbnail.service';
 import { socialMediaService } from './socialMedia.service';
 import { ServiceResponse } from '../types';
-import { sessionManager } from '../utils/session';
+
 import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
 import fetch from 'node-fetch';
 

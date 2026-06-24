@@ -299,7 +299,7 @@ export class SocialMediaService {
 
       // Generate transcript
       const result = await this.genAI.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
+        model: 'gemini-2.5-flash',
         contents: [
           {
             role: 'user',

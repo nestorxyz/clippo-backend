@@ -857,7 +857,7 @@ export class AIService {
       console.log(`📊 Message counts by role:`, roleCounts);
 
       // Validate and fix conversation flow to prevent API errors
-      const validatedHistory = [...historyDataRaw].reverse(); // Reverse if query returned desc
+      const validatedHistory = [...historyDataRaw]; // Convex query returns ascending (oldest first) by default
 
       // Build contents array ensuring it starts with a user message
       const rawContents = validatedHistory.map((h: any) => ({

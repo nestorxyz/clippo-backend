@@ -8,6 +8,7 @@ import {
   guardLinkRegistration,
   recordLinkAnalysis,
 } from './link-registration-guard';
+import { describeSourceExtraction } from './source-url';
 import { ServiceResponse } from '../types';
 
 import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
@@ -1340,6 +1341,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
             transcript: info.transcript, // Include transcript for storage in content column
             platform: info.platform,
             duration: info.duration,
+            sourceExtraction: describeSourceExtraction(url, 'short-video'),
           };
         } else {
           console.log(
@@ -1353,6 +1355,13 @@ Execute the two-step process to analyze and save this link with appropriate cate
       // text is not forwarded to Gemini without an explicit privacy decision.
       const page = await extractWebPage(url);
       const localSummary = page.description || page.text.slice(0, 500);
+      const sourceExtraction = describeSourceExtraction(url, 'web-page');
+      const limitations = [
+        focus
+          ? 'Focused AI summarization is not enabled for general webpages'
+          : null,
+        sourceExtraction.limitation,
+      ].filter((limitation): limitation is string => limitation !== null);
 
       return {
         success: true,
@@ -1364,9 +1373,8 @@ Execute the two-step process to analyze and save this link with appropriate cate
         },
         finalUrl: page.finalUrl,
         provenance: page.provenance,
-        limitations: focus
-          ? ['Focused AI summarization is not enabled for general webpages']
-          : [],
+        sourceExtraction,
+        limitations,
       };
     } catch (error: any) {
       console.error('Error analyzing URL:', error);

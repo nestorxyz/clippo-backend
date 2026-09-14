@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { classifySourceUrl } from './source-url';
+import { classifySourceUrl, describeSourceExtraction } from './source-url';
 
 test('classifies the source types in the DoryAI roadmap', () => {
   const cases = [
@@ -44,5 +44,38 @@ test('rejects relative and non-HTTP URLs', () => {
   assert.throws(
     () => classifySourceUrl('file:///tmp/private'),
     /HTTP or HTTPS/,
+  );
+});
+
+test('reports the extraction strategy that actually ran', () => {
+  assert.deepEqual(
+    describeSourceExtraction('https://example.com/article', 'web-page'),
+    {
+      kind: 'web-page',
+      usedStrategy: 'web-page',
+      degraded: false,
+      limitation: 'Full-page AI summarization is not enabled',
+    },
+  );
+  assert.deepEqual(
+    describeSourceExtraction('https://x.com/dory/status/123', 'web-page'),
+    {
+      kind: 'x',
+      usedStrategy: 'web-page',
+      degraded: true,
+      limitation: 'Specialized x extraction is not implemented',
+    },
+  );
+  assert.deepEqual(
+    describeSourceExtraction(
+      'https://instagram.com/reel/ABC123',
+      'short-video',
+    ),
+    {
+      kind: 'instagram-reel',
+      usedStrategy: 'short-video',
+      degraded: false,
+      limitation: null,
+    },
   );
 });

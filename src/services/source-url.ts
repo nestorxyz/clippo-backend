@@ -15,6 +15,15 @@ export interface ClassifiedSourceUrl {
   extractionStrategy: ExtractionStrategy;
 }
 
+export type ImplementedExtractionStrategy = 'short-video' | 'web-page';
+
+export interface SourceExtractionResult {
+  kind: SourceKind;
+  usedStrategy: ImplementedExtractionStrategy;
+  degraded: boolean;
+  limitation: string | null;
+}
+
 const trimHostname = (hostname: string): string =>
   hostname.toLowerCase().replace(/^(?:www\.|m\.)/, '');
 
@@ -104,5 +113,33 @@ export const classifySourceUrl = (input: string): ClassifiedSourceUrl => {
     kind: 'web-page',
     normalizedUrl: url.toString(),
     extractionStrategy: 'web-page',
+  };
+};
+
+export const describeSourceExtraction = (
+  input: string,
+  usedStrategy: ImplementedExtractionStrategy,
+): SourceExtractionResult => {
+  const source = classifySourceUrl(input);
+  if (source.extractionStrategy === usedStrategy) {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: false,
+      limitation:
+        usedStrategy === 'web-page'
+          ? 'Full-page AI summarization is not enabled'
+          : null,
+    };
+  }
+
+  return {
+    kind: source.kind,
+    usedStrategy,
+    degraded: true,
+    limitation:
+      source.extractionStrategy === 'planned'
+        ? `Specialized ${source.kind} extraction is not implemented`
+        : `Specialized ${source.kind} extraction failed; webpage metadata was used`,
   };
 };

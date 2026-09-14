@@ -1,0 +1,67 @@
+{
+  "records": [
+    {
+      "_id": "next-performance",
+      "url": "https://example.test/next-performance",
+      "title": "Practical Next.js rendering performance",
+      "description": "Reduce JavaScript and improve server rendering for a faster web app.",
+      "source": "Web",
+      "createdAt": 1789160400000,
+      "category": { "name": "work" },
+      "subCategory": { "name": "engineering" },
+      "tags": [{ "name": "typescript" }, { "name": "performance" }]
+    },
+    {
+      "_id": "pasta-recipe",
+      "url": "https://example.test/pasta",
+      "title": "Weeknight lemon pasta",
+      "description": "A quick fifteen minute dinner with garlic and parmesan.",
+      "source": "Web",
+      "createdAt": 1789074000000,
+      "category": { "name": "personal" },
+      "subCategory": { "name": "food" },
+      "tags": [{ "name": "recipe" }, { "name": "quick-meal" }]
+    },
+    {
+      "_id": "peru-hike",
+      "url": "https://example.test/peru-hike",
+      "title": "Packing for a high-altitude Peru hike",
+      "description": "Layering, hydration, and trail essentials for the Andes.",
+      "source": "Web",
+      "createdAt": 1788987600000,
+      "category": { "name": "personal" },
+      "subCategory": { "name": "travel" },
+      "tags": [{ "name": "peru" }, { "name": "hiking" }]
+    },
+    {
+      "_id": "fundraising-deck",
+      "url": "https://example.test/fundraising",
+      "title": "A clear seed fundraising deck",
+      "description": "How startup founders explain traction, market, team, and the raise.",
+      "source": "Web",
+      "createdAt": 1788901200000,
+      "category": { "name": "work" },
+      "subCategory": { "name": "startups" },
+      "tags": [{ "name": "fundraising" }, { "name": "pitch-deck" }]
+    },
+    {
+      "_id": "youtube-captions",
+      "url": "https://youtube.com/watch?v=fixture",
+      "title": "Reliable video ingestion",
+      "description": "Metadata extraction for long videos.",
+      "content": "The transcript explains manual captions, automatic captions, and language fallback.",
+      "source": "YouTube",
+      "createdAt": 1788814800000,
+      "category": { "name": "work" },
+      "subCategory": { "name": "engineering" },
+      "tags": [{ "name": "video" }, { "name": "ingestion" }]
+    }
+  ],
+  "cases": [
+    { "name": "title and tag match", "filters": { "stringQuery": "typescript web performance" }, "expectedFirst": "next-performance" },
+    { "name": "description match", "filters": { "stringQuery": "quick dinner parmesan" }, "expectedFirst": "pasta-recipe" },
+    { "name": "taxonomy and tags", "filters": { "category": "personal", "subcategory": "travel", "tags": ["hiking"] }, "expectedFirst": "peru-hike" },
+    { "name": "startup query", "filters": { "stringQuery": "startup fundraising traction" }, "expectedFirst": "fundraising-deck" },
+    { "name": "transcript match", "filters": { "stringQuery": "automatic captions language" }, "expectedFirst": "youtube-captions" }
+  ]
+}

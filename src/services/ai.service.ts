@@ -11,6 +11,14 @@ import {
 import { classifySourceUrl, describeSourceExtraction } from './source-url';
 import { extractYouTubeVideo } from './youtube.service';
 import { extractRestrictedPlatform } from './restricted-platform.service';
+import {
+  coerceLinkRetrievalFilters,
+  presentRetrievedLinks,
+  retrieveLinks,
+  type LinkRetrievalFilters,
+  type LinkRetrievalRecord,
+  type PresentedLinkRetrievalResult,
+} from './link-retrieval';
 import { ServiceResponse } from '../types';
 
 import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
@@ -309,10 +317,8 @@ You are a **Link Analysis and Categorization Specialist** embedded in a producti
 ## 🚨 ERROR HANDLING & FALLBACKS
 
 ### When URL Analysis Fails:
-- **Still proceed** with registration using provided user context
-- **Use user-provided title** or extract from URL
-- **Set category to "personal"** as safe default
-- **Add "needs-review" tag** to flag for user attention
+- **Do not register the link**
+- Explain the extraction failure briefly and let the user retry
 
 ### When Categorization is Uncertain:
 - **Default to "personal" category**
@@ -446,6 +452,47 @@ const tools: {
           },
         },
         required: ['url', 'category', 'title'],
+      },
+    },
+    {
+      name: 'get_links',
+      description:
+        'Retrieves saved links using lexical relevance plus category, subcategory, tag, and UTC date filters.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          stringQuery: {
+            type: Type.STRING,
+            description:
+              'Natural-language terms matched across title, description, saved content, source, URL, and taxonomy.',
+          },
+          category: {
+            type: Type.STRING,
+            description: 'Exact category name, compared case-insensitively.',
+          },
+          subcategory: {
+            type: Type.STRING,
+            description: 'Exact subcategory name, compared case-insensitively.',
+          },
+          tags: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: 'Tag names that every result must contain.',
+          },
+          dateRange: {
+            type: Type.OBJECT,
+            properties: {
+              from: {
+                type: Type.STRING,
+                description: 'Inclusive UTC start date in YYYY-MM-DD format.',
+              },
+              to: {
+                type: Type.STRING,
+                description: 'Inclusive UTC end date in YYYY-MM-DD format.',
+              },
+            },
+          },
+        },
       },
     },
   ],
@@ -603,7 +650,7 @@ _Note: These will be passed to you in system prompt each time dynamically. Alway
   "parameters": {
     "stringQuery": {
       "type": "string",
-      "description": "Searches title/description using simple keyword match",
+      "description": "Ranks matches across title, description, saved content, source, URL, and taxonomy",
       "optional": true
     },
     "category": {
@@ -1018,14 +1065,25 @@ export class AIService {
                 ? await this.registerLink(userId, fc.args)
                 : guard.response;
             } else if (fc.name === 'get_links') {
-              // For now, use recent links method - this can be enhanced later
-              // Need to implement getUserRecentLinks with Convex too?
-              // The original code called `this.getUserRecentLinks`. Checking that method...
-              // I will assume I need to refactor `getUserRecentLinks` too.
-              const linksResult = await this.getUserRecentLinks(userId, 20);
+              const filters = coerceLinkRetrievalFilters(fc.args);
+              const linksResult = await this.searchUserLinks(
+                userId,
+                filters,
+                20,
+              );
               functionResponse = linksResult.success
-                ? { links: linksResult.data }
-                : { result: "Couldn't find any links" };
+                ? {
+                    links: linksResult.data,
+                    retrieval: {
+                      strategy: 'lexical-v1',
+                      candidateWindow: 200,
+                      returned: linksResult.data?.length ?? 0,
+                    },
+                  }
+                : {
+                    result: 'Search failed',
+                    error: linksResult.error ?? 'Unknown retrieval failure',
+                  };
             } else if (fc.name === 'get_url_info') {
               functionResponse = await this.getUrlInfo(
                 fc.args?.url as string,
@@ -1563,6 +1621,38 @@ Execute the two-step process to analyze and save this link with appropriate cate
         success: false,
         error: error.message,
         message: 'Failed to retrieve recent links',
+      };
+    }
+  }
+
+  /**
+   * Search a bounded recent candidate set using deterministic lexical ranking.
+   */
+  async searchUserLinks(
+    userId: string,
+    filters: LinkRetrievalFilters,
+    limit: number = 20,
+  ): Promise<ServiceResponse<PresentedLinkRetrievalResult[]>> {
+    const candidates = await this.getUserRecentLinks(userId, 200);
+    if (!candidates.success) return candidates;
+
+    try {
+      return {
+        success: true,
+        data: presentRetrievedLinks(
+          retrieveLinks(
+            (candidates.data ?? []) as LinkRetrievalRecord[],
+            filters,
+            limit,
+          ),
+        ),
+        message: 'Links retrieved successfully',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Retrieval failed',
+        message: 'Failed to retrieve links',
       };
     }
   }

@@ -16,13 +16,17 @@ This checklist prepares the repository; it does not authorize making it public.
 - [x] `npm audit --audit-level=low` reports zero known vulnerabilities.
 - [x] Direct dependency manifests expose only MIT, Apache-2.0, or BSD-2-Clause
       licenses; detailed evidence is in `DEPENDENCY_REVIEW.md`.
+- [x] Dedicated Gitleaks full-history scan completed with redacted output; the
+      sanitized review is in `SECURITY_HISTORY_REVIEW.md`.
 
 ## Required before public visibility
 
 - [ ] Choose and approve an open-source license.
 - [ ] Resolve the existing `package.json` `ISC` metadata against the missing
       repository license file; do not treat npm-init metadata as owner approval.
-- [ ] Run a dedicated full-history secret scanner and resolve every finding.
+- [ ] Resolve the shared historical retired-provider anon JWT finding by verifying the
+      private project and rotating its key or decommissioning it; rerun Gitleaks
+      to zero unresolved findings.
 - [ ] Review transitive dependency licenses and generated/third-party assets.
 - [ ] Remove or document obsolete dependencies, routes, environment variables,
       and provider references.

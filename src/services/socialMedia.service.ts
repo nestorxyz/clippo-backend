@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as os from 'os';
 import ffmpeg from 'fluent-ffmpeg';
 import { convex, api } from '../config/convex';
+import { classifySourceUrl } from './source-url';
 
 interface SocialMediaInfo {
   title: string;
@@ -70,23 +71,25 @@ export class SocialMediaService {
    * Check if URL is from supported social media platforms
    */
   isSocialMediaUrl(url: string): boolean {
-    const socialMediaPatterns = [
-      /https?:\/\/(?:www\.)?instagram\.com\/reel\/[^/?]+/,
-      /https?:\/\/(?:www\.)?tiktok\.com\/@[^/]+\/video\/\d+/,
-      /https?:\/\/vm\.tiktok\.com\/[A-Za-z0-9]+\/?/,
-    ];
-
-    return socialMediaPatterns.some((pattern) => pattern.test(url));
+    try {
+      return classifySourceUrl(url).extractionStrategy === 'short-video';
+    } catch {
+      return false;
+    }
   }
 
   /**
    * Detect platform from URL
    */
   private detectPlatform(url: string): 'instagram' | 'tiktok' | null {
-    if (url.includes('instagram.com/reel/')) return 'instagram';
-    if (url.includes('tiktok.com') || url.includes('vm.tiktok.com'))
-      return 'tiktok';
-    return null;
+    try {
+      const source = classifySourceUrl(url);
+      if (source.kind === 'instagram-reel') return 'instagram';
+      if (source.kind === 'tiktok-video') return 'tiktok';
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /**

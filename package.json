@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "test": "tsx --test src/**/*.test.ts",
+    "check": "npm run test && npm run build",
     "start": "node dist/index.js",
     "db:types": "npx retired-provider gen types typescript --project-id $retired-provider_PROJECT_ID > src/types/retired-provider.ts"
   },

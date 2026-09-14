@@ -3,6 +3,11 @@ import { enqueueThumbnailJob } from './thumbnail.service';
 import { socialMediaService } from './socialMedia.service';
 import { extractWebPage } from './web-page-extractor';
 import { PublicResourceError } from './public-resource';
+import {
+  emptyLinkAnalysisState,
+  guardLinkRegistration,
+  recordLinkAnalysis,
+} from './link-registration-guard';
 import { ServiceResponse } from '../types';
 
 import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
@@ -43,7 +48,7 @@ You are a **Link Analysis and Categorization Specialist** embedded in a producti
 **Your Personality:**
 - Precise and methodical in analysis
 - Quick decision-maker when categorizing content
-- Always follow the two-step process religiously
+- Analyze first and register only after successful analysis
 - Default to practical, user-friendly categorization
 - Never engage in conversation - you are action-oriented
 
@@ -54,11 +59,11 @@ You are a **Link Analysis and Categorization Specialist** embedded in a producti
 **MISSION:** Analyze any provided URL and save it as a structured link with appropriate metadata.
 
 **SUCCESS CRITERIA:**
-1. Always execute the two-step process (get_url_info → register_link)
+1. Always call get_url_info first; call register_link only when analysis succeeds
 2. Provide meaningful titles and descriptions based on content analysis
 3. Assign appropriate categories, subcategories, and tags
 4. Default to "personal" category when uncertain
-5. Complete the task in exactly 2 function calls, then STOP and provide a summary
+5. On successful analysis, complete exactly 2 function calls and then STOP
 6. After successful register_link, respond with text summary - DO NOT call more functions
 
 ---
@@ -74,10 +79,11 @@ You are a **Link Analysis and Categorization Specialist** embedded in a producti
 - **Function:** \`register_link\`
 - **Purpose:** Save the link with categorized metadata
 - **Data Source:** Use information from Step 1 result + user context
-- **Required:** You MUST call this function second, always, no exceptions
+- **Required:** Call this function only when Step 1 returns \`success: true\`
 
 **CRITICAL RULES:** 
 - Never skip Step 1. Never call register_link without first calling get_url_info.
+- If get_url_info fails, do not register the link; explain the failure briefly.
 - After successful register_link, STOP function calling and provide a text summary.
 - Never call the same function twice - once get_url_info and register_link succeed, your job is DONE.
 
@@ -346,12 +352,12 @@ For each decision, include brief reasoning:
 
 ## 🔒 CONSTRAINTS & RULES
 
-1. **Execute exactly 2 function calls** (get_url_info → register_link), then STOP
+1. **Analyze first; register only after successful analysis**, then STOP
 2. **After successful register_link, respond with text summary** - NO MORE FUNCTIONS
 3. **Always provide title and description** - never leave empty
 4. **Default to "personal" category** when uncertain
 5. **Respect user's existing taxonomy** - don't create unless necessary
-6. **Complete the task** regardless of URL access issues
+6. **Fail safely** when URL analysis is blocked or unavailable; do not register
 7. **Never ask for clarification** - make best judgment and proceed
 8. **NEVER call functions after successful completion** - provide summary instead
 
@@ -452,7 +458,7 @@ You are Dory AI, a **highly reliable, action-oriented AI assistant** embedded in
 **Your Personality & Rules:**
 - Precise and methodical in analysis.
 - Quick decision-maker when categorizing content.
-- Always follow the two-step process religiously when a URL is provided.
+- Analyze first and register only after successful analysis when a URL is provided.
 - Default to practical, user-friendly categorization ("personal" as safe default).
 - **Do not ask for permission to save a link.** If the user provides a URL, assume they want to save it and proceed immediately.
 - Never engage in unnecessary conversation. Output structured function calls whenever possible.
@@ -491,7 +497,7 @@ To ensure high-quality data and a great user experience, saving a link is a two-
 
 1.  **Analyze the URL**: When a user wants to save a link, your **first** action is to call the get_url_info function with the provided URL. This function will return structured metadata about the link, including a title, description, and a preview image URL.
 
-2.  **Register the Link**: Once you receive the result from get_url_info, your **second** action is to call the register_link function. You must use the information from the get_url_info output to populate the arguments for register_link.
+2.  **Register the Link**: Only when get_url_info returns \`success: true\`, call register_link as your **second** action. If analysis fails, do not save the link. Use the successful get_url_info output to populate register_link.
 
     **CRITICAL MAPPING RULES:**
     -   Map urlMetadata.title to title parameter
@@ -884,6 +890,7 @@ export class AIService {
       let botReply = '';
       const functionCallsForClient: any[] = [];
       let continueConversation = true;
+      let linkAnalysis = emptyLinkAnalysisState();
 
       // Process conversation with function calls
       while (continueConversation) {
@@ -1000,7 +1007,13 @@ export class AIService {
             let functionResponse: any;
 
             if (fc.name === 'register_link') {
-              functionResponse = await this.registerLink(userId, fc.args);
+              const guard = guardLinkRegistration(
+                linkAnalysis,
+                fc.args?.url,
+              );
+              functionResponse = guard.allowed
+                ? await this.registerLink(userId, fc.args)
+                : guard.response;
             } else if (fc.name === 'get_links') {
               // For now, use recent links method - this can be enhanced later
               // Need to implement getUserRecentLinks with Convex too?
@@ -1014,6 +1027,10 @@ export class AIService {
               functionResponse = await this.getUrlInfo(
                 fc.args?.url as string,
                 fc.args?.focus as string,
+              );
+              linkAnalysis = recordLinkAnalysis(
+                fc.args?.url,
+                functionResponse,
               );
 
               console.log(`🔍 URL info retrieved:`, functionResponse);
@@ -1137,6 +1154,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
       let urlInfo: any = null;
       let linkResult: any = null;
       let conversationStep = 0;
+      let linkAnalysis = emptyLinkAnalysisState();
 
       console.log('🚀 Starting AI conversation for link saving');
       console.log('📝 User message:', userMessage);
@@ -1168,9 +1186,16 @@ Execute the two-step process to analyze and save this link with appropriate cate
                 fc.args?.url as string,
                 fc.args?.focus as string,
               );
+              linkAnalysis = recordLinkAnalysis(fc.args?.url, urlInfo);
               functionResponse = urlInfo;
             } else if (fc.name === 'register_link') {
-              linkResult = await this.registerLink(userId, fc.args);
+              const guard = guardLinkRegistration(
+                linkAnalysis,
+                fc.args?.url,
+              );
+              linkResult = guard.allowed
+                ? await this.registerLink(userId, fc.args)
+                : guard.response;
               functionResponse = linkResult;
             } else {
               functionResponse = { success: false, error: 'Unknown function' };
@@ -1188,6 +1213,11 @@ Execute the two-step process to analyze and save this link with appropriate cate
       // If AI didn't follow the two-step process, do fallback
       if (!urlInfo && !linkResult) {
         urlInfo = await this.getUrlInfo(url);
+        linkAnalysis = recordLinkAnalysis(url, urlInfo);
+        const guard = guardLinkRegistration(linkAnalysis, url);
+        if (!guard.allowed) {
+          throw new Error(`Failed to analyze link: ${guard.response.message}`);
+        }
         const fallbackData = {
           url,
           title: title || urlInfo?.urlMetadata?.title || 'Saved Link',
@@ -1202,9 +1232,17 @@ Execute the two-step process to analyze and save this link with appropriate cate
         linkResult = await this.registerLink(userId, fallbackData);
       }
 
-      if (!linkResult || !linkResult.success) {
+      if (!linkResult) {
+        const guard = guardLinkRegistration(linkAnalysis, url);
+        if (!guard.allowed) {
+          throw new Error(`Failed to analyze link: ${guard.response.message}`);
+        }
+        throw new Error('Failed to save link: no registration result');
+      }
+
+      if (!linkResult.success) {
         throw new Error(
-          `Failed to save link: ${linkResult?.error || 'Unknown error'}`,
+          `Failed to save link: ${linkResult.error || 'Unknown error'}`,
         );
       }
 

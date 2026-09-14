@@ -8,6 +8,9 @@ functions.
 The GitHub repository and package retain the historical `clippo-backend` name.
 DoryAI is the current product name.
 
+The cross-repository runtime and trust-boundary map lives in
+`../web-app/docs/ARCHITECTURE.md` in the shared local workspace.
+
 ## Local setup
 
 Requirements: a current Node.js LTS release, npm, the web/Convex project in

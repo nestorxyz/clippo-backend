@@ -13,12 +13,17 @@ This checklist prepares the repository; it does not authorize making it public.
       values.
 - [x] Bounded Git-history string scan found only placeholder/empty examples for
       the matched retired-provider and WhatsApp keys.
+- [x] `npm audit --audit-level=low` reports zero known vulnerabilities.
+- [x] Direct dependency manifests expose only MIT, Apache-2.0, or BSD-2-Clause
+      licenses; detailed evidence is in `DEPENDENCY_REVIEW.md`.
 
 ## Required before public visibility
 
 - [ ] Choose and approve an open-source license.
+- [ ] Resolve the existing `package.json` `ISC` metadata against the missing
+      repository license file; do not treat npm-init metadata as owner approval.
 - [ ] Run a dedicated full-history secret scanner and resolve every finding.
-- [ ] Review dependency licenses and generated/third-party assets.
+- [ ] Review transitive dependency licenses and generated/third-party assets.
 - [ ] Remove or document obsolete dependencies, routes, environment variables,
       and provider references.
 - [ ] Document production deployment without exposing infrastructure secrets.

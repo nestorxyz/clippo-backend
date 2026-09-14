@@ -59,12 +59,15 @@ strict TypeScript compilation.
 
 `src/services/source-url.ts` classifies DoryAI roadmap sources without fetching
 them. Instagram Reels and TikTok videos currently use the specialized short
-video processor. YouTube, LinkedIn, and X are explicitly marked `planned` until
-their extractors and live save/readbacks exist. Arbitrary HTTP(S) URLs use the
-general web-page boundary. That boundary pins each request and redirect to a
-validated public DNS address, accepts only standard HTTP(S) ports and HTML,
-and enforces timeout and response-size limits. The same guarded transport now
-protects remote thumbnail downloads.
+video processor. YouTube long videos use bounded, cookie-free yt-dlp metadata
+plus manual captions when available, falling back to explicitly labeled
+automatic captions or metadata-only results. YouTube Shorts, LinkedIn, and X
+remain specialized-extractor work and use explicitly degraded webpage metadata
+fallback. Arbitrary HTTP(S) URLs use the general web-page boundary. That
+boundary pins each request and redirect to a validated public DNS address,
+accepts only standard HTTP(S) ports and HTML, and enforces timeout and
+response-size limits. The same guarded transport protects caption and remote
+thumbnail downloads.
 
 General webpages currently return deterministic page metadata and a short
 local excerpt. Full page text is not sent to Gemini; focused AI summarization

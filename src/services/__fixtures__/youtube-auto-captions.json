@@ -1,0 +1,7 @@
+{
+  "events": [
+    { "segs": [{ "utf8": "Automatic captions " }, { "utf8": "work too." }] },
+    { "segs": [{ "utf8": "Automatic captions work too." }] },
+    { "segs": [{ "utf8": "But the result is labeled." }] }
+  ]
+}

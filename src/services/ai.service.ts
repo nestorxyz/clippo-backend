@@ -8,7 +8,8 @@ import {
   guardLinkRegistration,
   recordLinkAnalysis,
 } from './link-registration-guard';
-import { describeSourceExtraction } from './source-url';
+import { classifySourceUrl, describeSourceExtraction } from './source-url';
+import { extractYouTubeVideo } from './youtube.service';
 import { ServiceResponse } from '../types';
 
 import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
@@ -391,7 +392,7 @@ const tools: {
     {
       name: 'get_url_info',
       description:
-        'Analyzes URLs and provides metadata. For Instagram Reels and TikTok, it can process video and transcript content. For regular webpages, it performs bounded public-HTML extraction and returns deterministic metadata or an explicit failure.',
+        'Analyzes URLs and provides metadata. Instagram Reels and TikTok can use media processing; YouTube long videos can use metadata plus labeled manual or automatic captions. Regular webpages use bounded public-HTML extraction and return deterministic metadata or an explicit failure.',
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -638,7 +639,7 @@ _Note: These will be passed to you in system prompt each time dynamically. Alway
 \`\`\`json
 {
  "name": "get_url_info",
- "description": "Analyzes URLs and provides metadata. Instagram Reels and TikTok can use specialized media processing. Regular webpages use bounded public-HTML extraction and return deterministic metadata or an explicit failure.",
+ "description": "Analyzes URLs and provides metadata. Instagram Reels and TikTok can use specialized media processing; YouTube long videos can use metadata and labeled captions. Regular webpages use bounded public-HTML extraction and return deterministic metadata or an explicit failure.",
  "parameters": {
    "url": { "type": "string", "description": "The URL to analyze" },
    "focus": { "type": "string", "description": "Optional focus area for analysis" }
@@ -1276,6 +1277,39 @@ Execute the two-step process to analyze and save this link with appropriate cate
    */
   private async getUrlInfo(url: string, focus?: string): Promise<any> {
     try {
+      const classifiedSource = classifySourceUrl(url);
+      if (classifiedSource.kind === 'youtube-video') {
+        try {
+          const video = await extractYouTubeVideo(url);
+          return {
+            success: true,
+            summary: video.description || video.title,
+            urlMetadata: {
+              title: video.title,
+              description: video.description,
+              image: video.thumbnailUrl,
+            },
+            transcript: video.transcript,
+            transcriptLanguage: video.transcriptLanguage,
+            transcriptSource: video.transcriptSource,
+            transcriptTruncated: video.transcriptTruncated,
+            platform: 'YouTube',
+            channel: video.channel,
+            duration: video.duration,
+            sourceExtraction: describeSourceExtraction(
+              url,
+              'youtube-metadata',
+            ),
+            limitations: video.limitations,
+          };
+        } catch (error) {
+          console.warn(
+            'YouTube metadata extraction failed; using webpage fallback:',
+            error,
+          );
+        }
+      }
+
       // Check if this is a social media URL that needs special processing
       if (socialMediaService.isSocialMediaUrl(url)) {
         console.log(

@@ -19,6 +19,11 @@ private user content in the report.
   transport. It rejects non-HTTP(S) and nonstandard ports, blocks local/private
   DNS answers, pins connections to validated addresses, revalidates redirects,
   and bounds request time and response size.
+- YouTube metadata extraction must not read browser cookies. Caption downloads
+  use the guarded transport and bounded response size; full video download is
+  outside the long-video metadata path. Public caption text is returned through
+  the existing Gemini tool conversation and can be stored with the link in
+  Convex; no caption file is uploaded to Gemini.
 - Temporary media and provider uploads must be removed on success and failure.
 - Logs must not contain tokens, full private link libraries, transcripts, or
   production request bodies.

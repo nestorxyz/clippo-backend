@@ -6,8 +6,12 @@ test('classifies the source types in the DoryAI roadmap', () => {
   const cases = [
     ['https://www.instagram.com/reel/ABC_123/', 'instagram-reel', 'short-video'],
     ['https://vm.tiktok.com/ZM123/', 'tiktok-video', 'short-video'],
-    ['https://www.youtube.com/watch?v=abc123', 'youtube-video', 'planned'],
-    ['https://youtu.be/abc123?t=20', 'youtube-video', 'planned'],
+    [
+      'https://www.youtube.com/watch?v=abc123',
+      'youtube-video',
+      'youtube-metadata',
+    ],
+    ['https://youtu.be/abc123?t=20', 'youtube-video', 'youtube-metadata'],
     ['https://youtube.com/shorts/abc123', 'youtube-short', 'planned'],
     ['https://www.linkedin.com/posts/example', 'linkedin', 'planned'],
     ['https://x.com/example/status/123', 'x', 'planned'],
@@ -55,6 +59,18 @@ test('reports the extraction strategy that actually ran', () => {
       usedStrategy: 'web-page',
       degraded: false,
       limitation: 'Full-page AI summarization is not enabled',
+    },
+  );
+  assert.deepEqual(
+    describeSourceExtraction(
+      'https://youtube.com/watch?v=abc123',
+      'youtube-metadata',
+    ),
+    {
+      kind: 'youtube-video',
+      usedStrategy: 'youtube-metadata',
+      degraded: false,
+      limitation: null,
     },
   );
   assert.deepEqual(

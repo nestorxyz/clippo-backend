@@ -7,7 +7,11 @@ export type SourceKind =
   | 'x'
   | 'web-page';
 
-export type ExtractionStrategy = 'short-video' | 'planned' | 'web-page';
+export type ExtractionStrategy =
+  | 'short-video'
+  | 'youtube-metadata'
+  | 'planned'
+  | 'web-page';
 
 export interface ClassifiedSourceUrl {
   kind: SourceKind;
@@ -15,7 +19,10 @@ export interface ClassifiedSourceUrl {
   extractionStrategy: ExtractionStrategy;
 }
 
-export type ImplementedExtractionStrategy = 'short-video' | 'web-page';
+export type ImplementedExtractionStrategy =
+  | 'short-video'
+  | 'youtube-metadata'
+  | 'web-page';
 
 export interface SourceExtractionResult {
   kind: SourceKind;
@@ -89,7 +96,7 @@ export const classifySourceUrl = (input: string): ClassifiedSourceUrl => {
     return {
       kind: 'youtube-video',
       normalizedUrl: url.toString(),
-      extractionStrategy: 'planned',
+      extractionStrategy: 'youtube-metadata',
     };
   }
 

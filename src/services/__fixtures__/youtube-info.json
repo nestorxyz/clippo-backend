@@ -1,0 +1,19 @@
+{
+  "_type": "video",
+  "title": "How DoryAI remembers useful links",
+  "description": "A fixture video about saving and retrieving useful links.",
+  "thumbnail": "https://i.ytimg.com/vi/dory123/hqdefault.jpg",
+  "duration": 742,
+  "channel": "DoryAI",
+  "webpage_url": "https://www.youtube.com/watch?v=dory123",
+  "subtitles": {
+    "en": [
+      {
+        "ext": "vtt",
+        "url": "https://www.youtube.com/api/timedtext?v=dory123&lang=en",
+        "name": "English"
+      }
+    ]
+  },
+  "automatic_captions": {}
+}

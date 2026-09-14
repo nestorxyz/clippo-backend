@@ -11,6 +11,10 @@ Observed from the installed lockfile on 2026-09-14.
   `express-rate-limit`.
 - Updated the used Sharp package to the patched `0.35` line and Google GenAI
   within its existing major line; backend tests and strict compilation pass.
+- Updated `ytdlp-nodejs` from `2.3.4` to `3.4.5` after its bundled August 2025
+  yt-dlp binary failed current YouTube signature extraction. The updated package
+  bundles yt-dlp `2026.08.19`; the long-video path disables cookies and video
+  downloads and uses an explicit Node JavaScript runtime.
 
 ## Direct package licenses
 

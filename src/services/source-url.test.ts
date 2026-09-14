@@ -83,6 +83,16 @@ test('reports the extraction strategy that actually ran', () => {
     },
   );
   assert.deepEqual(
+    describeSourceExtraction('https://x.com/dory/status/123', 'url-only'),
+    {
+      kind: 'x',
+      usedStrategy: 'url-only',
+      degraded: true,
+      limitation:
+        'Content for x could not be extracted; URL-only metadata was used',
+    },
+  );
+  assert.deepEqual(
     describeSourceExtraction(
       'https://instagram.com/reel/ABC123',
       'short-video',

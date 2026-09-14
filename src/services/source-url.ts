@@ -22,7 +22,8 @@ export interface ClassifiedSourceUrl {
 export type ImplementedExtractionStrategy =
   | 'short-video'
   | 'youtube-metadata'
-  | 'web-page';
+  | 'web-page'
+  | 'url-only';
 
 export interface SourceExtractionResult {
   kind: SourceKind;
@@ -145,8 +146,10 @@ export const describeSourceExtraction = (
     usedStrategy,
     degraded: true,
     limitation:
-      source.extractionStrategy === 'planned'
-        ? `Specialized ${source.kind} extraction is not implemented`
-        : `Specialized ${source.kind} extraction failed; webpage metadata was used`,
+      usedStrategy === 'url-only'
+        ? `Content for ${source.kind} could not be extracted; URL-only metadata was used`
+        : source.extractionStrategy === 'planned'
+          ? `Specialized ${source.kind} extraction is not implemented`
+          : `Specialized ${source.kind} extraction failed; webpage metadata was used`,
   };
 };

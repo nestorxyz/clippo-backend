@@ -10,6 +10,7 @@ import {
 } from './link-registration-guard';
 import { classifySourceUrl, describeSourceExtraction } from './source-url';
 import { extractYouTubeVideo } from './youtube.service';
+import { extractRestrictedPlatform } from './restricted-platform.service';
 import { ServiceResponse } from '../types';
 
 import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
@@ -392,7 +393,7 @@ const tools: {
     {
       name: 'get_url_info',
       description:
-        'Analyzes URLs and provides metadata. Instagram Reels and TikTok can use media processing; YouTube long videos can use metadata plus labeled manual or automatic captions. Regular webpages use bounded public-HTML extraction and return deterministic metadata or an explicit failure.',
+        'Analyzes URLs and provides metadata. Instagram Reels and TikTok can use media processing; YouTube long videos can use metadata plus labeled captions. LinkedIn and X use guarded public metadata or an explicit URL-only fallback. Regular webpages use bounded public-HTML extraction.',
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -639,7 +640,7 @@ _Note: These will be passed to you in system prompt each time dynamically. Alway
 \`\`\`json
 {
  "name": "get_url_info",
- "description": "Analyzes URLs and provides metadata. Instagram Reels and TikTok can use specialized media processing; YouTube long videos can use metadata and labeled captions. Regular webpages use bounded public-HTML extraction and return deterministic metadata or an explicit failure.",
+ "description": "Analyzes URLs and provides metadata. Instagram Reels and TikTok can use specialized media processing; YouTube long videos can use metadata and labeled captions. LinkedIn and X use guarded public metadata or an explicit URL-only fallback. Regular webpages use bounded public-HTML extraction.",
  "parameters": {
    "url": { "type": "string", "description": "The URL to analyze" },
    "focus": { "type": "string", "description": "Optional focus area for analysis" }
@@ -1308,6 +1309,34 @@ Execute the two-step process to analyze and save this link with appropriate cate
             error,
           );
         }
+      }
+
+      if (
+        classifiedSource.kind === 'linkedin' ||
+        classifiedSource.kind === 'x'
+      ) {
+        const restricted = await extractRestrictedPlatform(url);
+        const sourceExtraction = describeSourceExtraction(
+          url,
+          restricted.usedStrategy,
+        );
+        const limitations = sourceExtraction.limitation
+          ? [sourceExtraction.limitation]
+          : [];
+        return {
+          success: true,
+          summary: restricted.summary,
+          urlMetadata: {
+            title: restricted.title,
+            description: restricted.description,
+            image: restricted.imageUrl,
+          },
+          platform: restricted.platform,
+          contentAvailable: restricted.contentAvailable,
+          extractionFailureCode: restricted.failureCode,
+          sourceExtraction,
+          limitations,
+        };
       }
 
       // Check if this is a social media URL that needs special processing

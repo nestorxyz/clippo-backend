@@ -1,10 +1,11 @@
 import { convex, api } from '../config/convex'; // Added Convex import
 import { enqueueThumbnailJob } from './thumbnail.service';
 import { socialMediaService } from './socialMedia.service';
+import { extractWebPage } from './web-page-extractor';
+import { PublicResourceError } from './public-resource';
 import { ServiceResponse } from '../types';
 
 import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
-import fetch from 'node-fetch';
 
 interface QuickSaveLinkRequest {
   url: string;
@@ -383,7 +384,7 @@ const tools: {
     {
       name: 'get_url_info',
       description:
-        'Analyzes URLs and provides comprehensive metadata. For social media videos (Instagram Reels, TikTok), downloads video, extracts audio transcripts, generates thumbnails, and provides rich content analysis. For regular URLs, extracts OpenGraph metadata and provides AI-powered summaries.',
+        'Analyzes URLs and provides metadata. For Instagram Reels and TikTok, it can process video and transcript content. For regular webpages, it performs bounded public-HTML extraction and returns deterministic metadata or an explicit failure.',
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -630,7 +631,7 @@ _Note: These will be passed to you in system prompt each time dynamically. Alway
 \`\`\`json
 {
  "name": "get_url_info",
- "description": "Analyzes URLs and provides comprehensive metadata. For social media videos (Instagram Reels, TikTok), it downloads the video, extracts audio transcripts, generates thumbnails, and provides rich content analysis. For regular URLs, it extracts OpenGraph metadata and provides AI-powered summaries.",
+ "description": "Analyzes URLs and provides metadata. Instagram Reels and TikTok can use specialized media processing. Regular webpages use bounded public-HTML extraction and return deterministic metadata or an explicit failure.",
  "parameters": {
    "url": { "type": "string", "description": "The URL to analyze" },
    "focus": { "type": "string", "description": "Optional focus area for analysis" }
@@ -1310,60 +1311,33 @@ Execute the two-step process to analyze and save this link with appropriate cate
         }
       }
 
-      // Standard URL processing (original logic)
-      const prompt = focus
-        ? `Analyze this URL and provide detailed information focusing on: ${focus}. URL: ${url}`
-        : `Analyze this URL and provide a comprehensive summary including: main topic, key points, type of content, and any important details. URL: ${url}`;
+      // Standard webpage processing stays deterministic and bounded. Full page
+      // text is not forwarded to Gemini without an explicit privacy decision.
+      const page = await extractWebPage(url);
+      const localSummary = page.description || page.text.slice(0, 500);
 
-      // Get OpenGraph metadata (simplified version)
-      let ogMetadata: any = {};
-      try {
-        const response = await fetch(url);
-        const html = await response.text();
-
-        // Simple regex to extract basic metadata
-        const titleMatch = html.match(/<title>(.*?)<\/title>/i);
-        const descMatch = html.match(
-          /<meta[^>]*property="og:description"[^>]*content="([^"]*)"[^>]*>/i,
-        );
-        const imageMatch = html.match(
-          /<meta[^>]*property="og:image"[^>]*content="([^"]*)"[^>]*>/i,
-        );
-
-        ogMetadata = {
-          title: titleMatch?.[1] || '',
-          description: descMatch?.[1] || '',
-          image: imageMatch?.[1] || '',
-        };
-      } catch (err) {
-        console.error('Failed to fetch URL metadata:', err);
-      }
-
-      const result = await genAI.models.generateContent({
-        model: modelName,
-        contents: prompt,
-        config: {
-          tools: [{ urlContext: {} }],
-        },
-      });
-      const responseText = result.text || (ogMetadata as any).description || '';
-
-      const finalResult = {
+      return {
         success: true,
-        summary: responseText || ogMetadata.description || '',
+        summary: localSummary,
         urlMetadata: {
-          title: ogMetadata.title || 'Untitled',
-          description: ogMetadata.description || '',
-          image: ogMetadata.image || null,
+          title: page.title,
+          description: page.description,
+          image: page.imageUrl,
         },
+        finalUrl: page.finalUrl,
+        provenance: page.provenance,
+        limitations: focus
+          ? ['Focused AI summarization is not enabled for general webpages']
+          : [],
       };
-
-      return finalResult;
     } catch (error: any) {
       console.error('Error analyzing URL:', error);
       return {
         success: false,
-        error: `Failed to analyze URL: ${error.message}`,
+        error:
+          error instanceof PublicResourceError
+            ? `${error.code}: ${error.message}`
+            : `Failed to analyze URL: ${error.message}`,
       };
     }
   }

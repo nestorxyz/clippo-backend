@@ -61,7 +61,15 @@ strict TypeScript compilation.
 them. Instagram Reels and TikTok videos currently use the specialized short
 video processor. YouTube, LinkedIn, and X are explicitly marked `planned` until
 their extractors and live save/readbacks exist. Arbitrary HTTP(S) URLs use the
-general web-page boundary; classification alone is not proof of extraction.
+general web-page boundary. That boundary pins each request and redirect to a
+validated public DNS address, accepts only standard HTTP(S) ports and HTML,
+and enforces timeout and response-size limits. The same guarded transport now
+protects remote thumbnail downloads.
+
+General webpages currently return deterministic page metadata and a short
+local excerpt. Full page text is not sent to Gemini; focused AI summarization
+remains an explicit product/privacy decision. Fixture and read-only extraction
+proof is not a live save/readback.
 
 ## Security and publication
 

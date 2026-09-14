@@ -15,9 +15,10 @@ private user content in the report.
 - `CONVEX_BACKEND_SECRET` is server-only and shared only by Convex actions and
   this backend.
 - All privileged Convex calls must retain their secret and user-scope checks.
-- URL fetching must reject non-HTTP(S) schemes and, before general-page fetching
-  ships, must defend against private-network/metadata endpoints, redirect abuse,
-  oversized responses, and unsupported content types.
+- General-page and remote-thumbnail fetching must use the shared guarded
+  transport. It rejects non-HTTP(S) and nonstandard ports, blocks local/private
+  DNS answers, pins connections to validated addresses, revalidates redirects,
+  and bounds request time and response size.
 - Temporary media and provider uploads must be removed on success and failure.
 - Logs must not contain tokens, full private link libraries, transcripts, or
   production request bodies.

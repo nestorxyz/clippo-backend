@@ -6,7 +6,9 @@ import { PublicResourceError } from './public-resource';
 import {
   emptyLinkAnalysisState,
   guardLinkRegistration,
+  nextChatToolRound,
   recordLinkAnalysis,
+  recordLinkRegistration,
 } from './link-registration-guard';
 import { classifySourceUrl, describeSourceExtraction } from './source-url';
 import { extractYouTubeVideo } from './youtube.service';
@@ -850,48 +852,13 @@ export class AIService {
         .replace('2025-05-31', toDate)
         .replace('{current_datetime}', current_datetime);
 
-      // Save user message to chat history via Convex
-      // Note: sessionId needs to be a valid ID. If it's a new session, we might need to create it or rely on valid ID passed from frontend.
-      // The request.sessionId is likely a string (UUID or Convex ID).
-      // If it's UUID (legacy), this might fail if Convex expects v.id('chatSessions').
-      // We need to ensure sessionId is a valid Convex ID.
-      // If the frontend passed it, it's likely a Convex ID.
       await convex.mutation(api.chat.saveMessage, {
-        sessionId: sessionId as any, // Cast to any to bypass strict ID typing here if needed, or string
+        sessionId: sessionId as any,
         role: 'user',
         parts: [{ text: message }],
         secret: process.env.CONVEX_BACKEND_SECRET,
       });
 
-      // Get chat history from Convex (fetch 40 messages)
-      // We need a query for this. schema has `chatMessages` table. `chat.ts` has `getMessages`.
-      // `getMessages` checks auth. We need `getMessagesForBackend`?
-      // Wait, I didn't create `getMessagesForBackend`.
-      // I can fetch using `convex.query(api.chat.getMessages, { sessionId })` if backend token was auth'd, but it's not.
-      // I need to add `getMessagesForBackend` or similar to `chat.ts`.
-      // For now, I will assume I need to add that tool.
-      // HOLD ON: I missed this dependency.
-
-      // Let's assume I will add `getMessagesForBackend` next.
-      // Using `any` for now to proceed code structure.
-      // Actually, I should probably fail or wait?
-      // I will assume `api.chat.getMessages` is usable via a new `admin` query or I add `getMessages` without auth for backend (bad idea generally but OK for this task if private).
-      // I will skip fetching history for a second in this thought process and realize I need to add `getMessages` query that takes `sessionId` without auth check (or trusting backend).
-
-      // I'll comment this out and mark TO DO, or better, add it to `chat.ts` quickly?
-      // No, I'm in `replace_file_content`.
-
-      // I will use `convex.query("chat:getMessages", ...)` but that one checks auth.
-      // I need to update `chat.ts` to expose messages to backend.
-
-      // Let's finish the replacement assuming I'll fix `chat.ts` immediately after.
-      // I'll use `api.chat.getMessagesForBackend` (which I will create).
-
-      /*
-      const historyData = await convex.query(api.chat.getMessagesForBackend, { sessionId });
-      */
-
-      // Temporary:
       const historyDataRaw = await convex.query(
         api.chat.getMessagesForBackend,
         {
@@ -927,98 +894,19 @@ export class AIService {
       const contents = this.ensureStartsWithUserMessage(rawContents);
 
       console.log(`📝 Prepared ${contents.length} content items for AI`);
-      // Debug: Log last few content items
-      contents.slice(-3).forEach((content: any, index: number) => {
-        console.log(
-          `   ${index}: role=${content.role}, parts count=${
-            Array.isArray(content.parts) ? content.parts.length : 'not array'
-          }`,
-        );
-      });
-
-      console.log('contens', contents);
 
       let botReply = '';
       const functionCallsForClient: any[] = [];
       let continueConversation = true;
       let linkAnalysis = emptyLinkAnalysisState();
+      let toolRounds = 0;
 
       // Process conversation with function calls
       while (continueConversation) {
-        console.log(`🔄 AI Call - Contents length: ${contents.length}`);
-
-        // Debug: Show last few messages with their parts to understand conversation flow
-        console.log('🔍 Last 5 messages in conversation:');
-        contents.slice(-5).forEach((content: any, index: number) => {
-          const actualIndex = contents.length - 5 + index;
-          console.log(`  [${actualIndex}] role=${content.role}`);
-
-          // Show what type of parts this message has
-          if (Array.isArray(content.parts)) {
-            content.parts.forEach((part: any, partIndex: number) => {
-              if (part.text) {
-                console.log(
-                  `    Part ${partIndex}: text - "${part.text.substring(
-                    0,
-                    100,
-                  )}${part.text.length > 100 ? '...' : ''}"`,
-                );
-              } else if (part.functionCall) {
-                console.log(
-                  `    Part ${partIndex}: functionCall - ${
-                    part.functionCall.name
-                  }(${JSON.stringify(part.functionCall.args)})`,
-                );
-              } else if (part.functionResponse) {
-                console.log(
-                  `    Part ${partIndex}: functionResponse - ${part.functionResponse.name}`,
-                );
-              } else {
-                console.log(
-                  `    Part ${partIndex}: unknown type -`,
-                  Object.keys(part),
-                );
-              }
-            });
-          } else {
-            console.log(`    Parts: not an array -`, typeof content.parts);
-          }
-        });
-
-        // Check for conversation flow violations
-        console.log('🔍 Checking conversation flow:');
-        for (let i = 0; i < contents.length - 1; i++) {
-          const current = contents[i];
-          const next = contents[i + 1];
-
-          if (current.role === 'model' && next.role === 'model') {
-            // Check if this is a valid model->model sequence
-            const currentHasFunctionCall =
-              Array.isArray(current.parts) &&
-              current.parts.some((part: any) => part.functionCall);
-            const nextHasFunctionCall =
-              Array.isArray(next.parts) &&
-              next.parts.some((part: any) => part.functionCall);
-
-            console.log(
-              `  [${i}→${
-                i + 1
-              }] model→model: current has functionCall: ${currentHasFunctionCall}, next has functionCall: ${nextHasFunctionCall}`,
-            );
-          }
-        }
-
-        // Debug: Log the last few items in contents to see what AI has access to
-        if (contents.length > 0) {
-          const lastContent = contents[contents.length - 1];
-          console.log(`📋 Last content role: ${lastContent.role}`);
-          if (lastContent.role === 'function') {
-            console.log(
-              `🔧 Function responses available to AI:`,
-              JSON.stringify(lastContent.parts, null, 2),
-            );
-          }
-        }
+        toolRounds = nextChatToolRound(toolRounds);
+        console.log(
+          `🔄 AI call ${toolRounds} - ${contents.length} conversation items`,
+        );
 
         const result = await genAI.models.generateContent({
           model: modelName,
@@ -1031,13 +919,9 @@ export class AIService {
 
         const functionCalls = result.functionCalls;
         if (functionCalls && functionCalls.length > 0) {
-          console.log(`🛠️ AI making ${functionCalls.length} function call(s):`);
-          functionCalls.forEach((fc, index) => {
-            console.log(
-              `   ${index + 1}. ${fc.name} with args:`,
-              JSON.stringify(fc.args, null, 2),
-            );
-          });
+          console.log(
+            `🛠️ AI tool calls: ${functionCalls.map(({ name }) => name).join(', ')}`,
+          );
 
           const functionCallParts = functionCalls.map((fc) => ({
             functionCall: fc,
@@ -1062,9 +946,16 @@ export class AIService {
                 linkAnalysis,
                 fc.args?.url,
               );
-              functionResponse = guard.allowed
-                ? await this.registerLink(userId, fc.args)
-                : guard.response;
+              if (guard.allowed) {
+                functionResponse = await this.registerLink(userId, fc.args);
+                linkAnalysis = recordLinkRegistration(
+                  linkAnalysis,
+                  fc.args?.url,
+                  functionResponse,
+                );
+              } else {
+                functionResponse = guard.response;
+              }
             } else if (fc.name === 'get_links') {
               const filters = coerceLinkRetrievalFilters(fc.args);
               const linksResult = await this.searchUserLinks(
@@ -1093,9 +984,8 @@ export class AIService {
               linkAnalysis = recordLinkAnalysis(
                 fc.args?.url,
                 functionResponse,
+                linkAnalysis,
               );
-
-              console.log(`🔍 URL info retrieved:`, functionResponse);
             }
 
             functionCallsForClient.push({
@@ -1169,13 +1059,25 @@ export class AIService {
     try {
       const { url, title, description, userId } = request;
 
-      console.log('Direct link save request:', request);
+      console.log('Direct link save request received', {
+        hasProvidedTitle: Boolean(title),
+        hasProvidedDescription: Boolean(description),
+      });
 
       // Get user's categories, subcategories, and tags using Convex
       const [categoriesData, subCategoriesData, tagsData] = await Promise.all([
-        convex.query(api.categories.getByUser, { userId }),
-        convex.query(api.subCategories.getByUser, { userId }),
-        convex.query(api.tags.getByUser, { userId }),
+        convex.query(api.categories.getByUser, {
+          userId,
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        }),
+        convex.query(api.subCategories.getByUser, {
+          userId,
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        }),
+        convex.query(api.tags.getByUser, {
+          userId,
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        }),
       ]);
 
       const categories =
@@ -1219,7 +1121,6 @@ Execute the two-step process to analyze and save this link with appropriate cate
       let linkAnalysis = emptyLinkAnalysisState();
 
       console.log('🚀 Starting AI conversation for link saving');
-      console.log('📝 User message:', userMessage);
 
       // Sequential conversation loop
       while (continueConversation && conversationStep < 5) {
@@ -1248,17 +1149,29 @@ Execute the two-step process to analyze and save this link with appropriate cate
                 fc.args?.url as string,
                 fc.args?.focus as string,
               );
-              linkAnalysis = recordLinkAnalysis(fc.args?.url, urlInfo);
+              linkAnalysis = recordLinkAnalysis(
+                fc.args?.url,
+                urlInfo,
+                linkAnalysis,
+              );
               functionResponse = urlInfo;
             } else if (fc.name === 'register_link') {
               const guard = guardLinkRegistration(
                 linkAnalysis,
                 fc.args?.url,
               );
-              linkResult = guard.allowed
-                ? await this.registerLink(userId, fc.args)
-                : guard.response;
-              functionResponse = linkResult;
+              if (guard.allowed) {
+                functionResponse = await this.registerLink(userId, fc.args);
+                linkAnalysis = recordLinkRegistration(
+                  linkAnalysis,
+                  fc.args?.url,
+                  functionResponse,
+                );
+                if (!linkResult?.success) linkResult = functionResponse;
+              } else {
+                functionResponse = guard.response;
+                if (!linkResult) linkResult = functionResponse;
+              }
             } else {
               functionResponse = { success: false, error: 'Unknown function' };
             }
@@ -1275,7 +1188,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
       // If AI didn't follow the two-step process, do fallback
       if (!urlInfo && !linkResult) {
         urlInfo = await this.getUrlInfo(url);
-        linkAnalysis = recordLinkAnalysis(url, urlInfo);
+        linkAnalysis = recordLinkAnalysis(url, urlInfo, linkAnalysis);
         const guard = guardLinkRegistration(linkAnalysis, url);
         if (!guard.allowed) {
           throw new Error(`Failed to analyze link: ${guard.response.message}`);
@@ -1528,7 +1441,11 @@ Execute the two-step process to analyze and save this link with appropriate cate
         content, // Add support for content (transcript)
       } = args;
 
-      console.log(`📥 Registering link:`, args);
+      console.log('📥 Registering analyzed link', {
+        source: typeof source === 'string' ? source : 'unknown',
+        hasPreview: Boolean(img_preview),
+        hasContent: Boolean(content),
+      });
 
       const existingLink = await convex.query(
         api.links.findLinkByUrlForBackend,
@@ -1590,10 +1507,9 @@ Execute the two-step process to analyze and save this link with appropriate cate
         throw new Error('Failed to register link in Convex');
       }
 
-      console.log(
-        '🎉 Link registration completed successfully!',
-        result.linkId,
-      );
+      console.log('🎉 Link registration completed successfully', {
+        duplicate: result.duplicate === true,
+      });
 
       // If we have a remote preview, enqueue background thumbnail processing
       if (img_preview && result.linkId && !result.duplicate) {
@@ -1690,6 +1606,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
       // We use getMessagesForBackend which is an internal query
       const messages = await convex.query(api.chat.getMessagesForBackend, {
         sessionId: sessionId as any,
+        secret: process.env.CONVEX_BACKEND_SECRET,
       });
       return messages.slice(0, limit);
     } catch (error) {

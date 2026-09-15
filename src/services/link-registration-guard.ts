@@ -3,6 +3,7 @@ import { classifySourceUrl } from './source-url';
 export interface LinkAnalysisState {
   analyzedUrl: string | null;
   error: string | null;
+  registeredUrls: string[];
 }
 
 type GuardResult =
@@ -15,11 +16,13 @@ type GuardResult =
 export const emptyLinkAnalysisState = (): LinkAnalysisState => ({
   analyzedUrl: null,
   error: null,
+  registeredUrls: [],
 });
 
 export const recordLinkAnalysis = (
   url: unknown,
   result: unknown,
+  currentState: LinkAnalysisState = emptyLinkAnalysisState(),
 ): LinkAnalysisState => {
   const analysis = result as { success?: unknown; error?: unknown } | null;
   if (!analysis || analysis.success !== true) {
@@ -29,6 +32,7 @@ export const recordLinkAnalysis = (
         typeof analysis?.error === 'string'
           ? analysis.error
           : 'URL analysis failed',
+      registeredUrls: currentState.registeredUrls,
     };
   }
 
@@ -36,9 +40,34 @@ export const recordLinkAnalysis = (
     return {
       analyzedUrl: classifySourceUrl(String(url)).normalizedUrl,
       error: null,
+      registeredUrls: currentState.registeredUrls,
     };
   } catch {
-    return { analyzedUrl: null, error: 'URL analysis returned an invalid URL' };
+    return {
+      analyzedUrl: null,
+      error: 'URL analysis returned an invalid URL',
+      registeredUrls: currentState.registeredUrls,
+    };
+  }
+};
+
+export const recordLinkRegistration = (
+  state: LinkAnalysisState,
+  registrationUrl: unknown,
+  result: unknown,
+): LinkAnalysisState => {
+  const response = result as { success?: unknown } | null;
+  if (response?.success !== true) return state;
+
+  try {
+    const normalizedUrl = classifySourceUrl(
+      String(registrationUrl),
+    ).normalizedUrl;
+    return state.registeredUrls.includes(normalizedUrl)
+      ? state
+      : { ...state, registeredUrls: [...state.registeredUrls, normalizedUrl] };
+  } catch {
+    return state;
   }
 };
 
@@ -83,6 +112,17 @@ export const guardLinkRegistration = (
     };
   }
 
+  if (state.registeredUrls.includes(normalizedRegistrationUrl)) {
+    return {
+      allowed: false,
+      response: {
+        success: false,
+        error: 'LINK_ALREADY_REGISTERED',
+        message: 'This link was already saved in the current request',
+      },
+    };
+  }
+
   if (normalizedRegistrationUrl !== state.analyzedUrl) {
     return {
       allowed: false,
@@ -94,4 +134,18 @@ export const guardLinkRegistration = (
     };
   }
   return { allowed: true };
+};
+
+export const MAX_CHAT_TOOL_ROUNDS = 6;
+
+export const nextChatToolRound = (
+  completedRounds: number,
+  maximumRounds = MAX_CHAT_TOOL_ROUNDS,
+): number => {
+  if (completedRounds >= maximumRounds) {
+    throw new Error(
+      `Chat stopped after ${maximumRounds} tool rounds without a final response`,
+    );
+  }
+  return completedRounds + 1;
 };

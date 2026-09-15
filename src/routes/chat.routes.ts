@@ -14,7 +14,7 @@ interface ChatRequest {
 /**
  * Process chat message - endpoint for web app (replaces edge function)
  * Authenticated via Service Secret (from Convex) only.
- * No retired-provider Auth (JWT) is used here.
+ * Authentication is handled by the application boundary.
  */
 router.post(
   '/',

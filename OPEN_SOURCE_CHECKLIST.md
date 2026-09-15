@@ -24,8 +24,7 @@ This checklist prepares the repository; it does not authorize making it public.
 - [ ] Choose and approve an open-source license.
 - [ ] Resolve the existing `package.json` `ISC` metadata against the missing
       repository license file; do not treat npm-init metadata as owner approval.
-- [ ] Resolve the shared historical retired-provider anon JWT finding by verifying the
-      private project and rotating its key or decommissioning it; rerun Gitleaks
+- [ ] Rewrite the retired-provider reference from Git history and rerun Gitleaks
       to zero unresolved findings.
 - [ ] Review transitive dependency licenses and generated/third-party assets.
 - [ ] Remove or document obsolete dependencies, routes, environment variables,
@@ -33,5 +32,5 @@ This checklist prepares the repository; it does not authorize making it public.
 - [ ] Document production deployment without exposing infrastructure secrets.
 - [ ] Enable private vulnerability reporting and appropriate branch protection.
 - [ ] Confirm CI on a pull request from a clean clone.
-- [ ] Obtain explicit approval to change visibility, then verify GitHub's public
-      readback and clone/setup flow.
+- [x] Owner approved public visibility on 2026-09-15.
+- [ ] Verify GitHub's public readback and clean-clone setup flow.

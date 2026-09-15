@@ -7,7 +7,7 @@ Observed from the installed lockfile on 2026-09-14.
 - `npm audit --audit-level=low`: zero known vulnerabilities after removing
   unused runtime packages and applying patched dependency updates.
 - Removed as unused/legacy: `axios`, `uuid`, `@types/uuid`, bundled `npm`, `i`,
-  `twilio`, `@retired-provider/retired-provider-js`, `jsonwebtoken`, `@types/jsonwebtoken`, and
+  `twilio`, the retired database client, `jsonwebtoken`, `@types/jsonwebtoken`, and
   `express-rate-limit`.
 - Updated the used Sharp package to the patched `0.35` line and Google GenAI
   within its existing major line; backend tests and strict compilation pass.

@@ -260,7 +260,7 @@ You are a **Link Analysis and Categorization Specialist** embedded in a producti
   "urlMetadata": {
     "title": "Video by motivational_speaker",
     "description": "Be different, embrace your unique qualities.",
-    "image": "https://retired-provider.co/storage/v1/object/public/link-previews/social_instagram_123.jpg"
+    "image": "https://cdn.example.com/link-previews/social_instagram_123.jpg"
   },
   "transcript": "For the few people who were like me, and felt like everyone told them there was something wrong with them, you are different, and that's okay...",
   "platform": "instagram",
@@ -280,7 +280,7 @@ You are a **Link Analysis and Categorization Specialist** embedded in a producti
     "subcategory": "self-improvement",
     "tags": ["motivation", "personal-growth", "mindset"],
     "source": "Instagram",
-    "img_preview": "https://retired-provider.co/storage/v1/object/public/link-previews/social_instagram_123.jpg",
+    "img_preview": "https://cdn.example.com/link-previews/social_instagram_123.jpg",
     "content": "For the few people who were like me, and felt like everyone told them there was something wrong with them, you are different, and that's okay..."
   }
 }

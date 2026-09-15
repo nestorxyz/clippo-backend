@@ -429,7 +429,7 @@ export class SocialMediaService {
       console.log('📝 Transcribing audio...');
       const transcript = await this.transcribeAudio(actualAudioPath);
 
-      // Upload thumbnail to retired-provider
+      // Store the thumbnail through the configured media service.
       console.log('☁️ Uploading thumbnail...');
       const thumbnailUrl = await this.uploadThumbnail(thumbnailPath);
 

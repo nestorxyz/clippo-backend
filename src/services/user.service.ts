@@ -21,7 +21,7 @@ export class UserService {
       const { profile, isNew } = result;
 
       // Map to expected structure. webhook.routes.ts expects user.id to be the User ID.
-      // In retired-provider, profile.id IS the user ID.
+      // The profile ID is the application user ID.
       // In Convex, profile.userId is the User ID.
       // We return the profile, but ensure 'id' property matches userId for compatibility
       const mappedProfile = {

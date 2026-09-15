@@ -26,7 +26,10 @@ This checklist prepares the repository; it does not authorize making it public.
       repository license file; do not treat npm-init metadata as owner approval.
 - [ ] Rewrite the retired-provider reference from Git history and rerun Gitleaks
       to zero unresolved findings.
-- [ ] Review transitive dependency licenses and generated/third-party assets.
+- [x] Inventory transitive dependency licenses and assets in
+      `PUBLICATION_RIGHTS_REVIEW.md`.
+- [ ] Replace or explicitly accept the unmaintained media wrapper and its
+      transitive package with missing license metadata.
 - [ ] Remove or document obsolete dependencies, routes, environment variables,
       and provider references.
 - [ ] Document production deployment without exposing infrastructure secrets.

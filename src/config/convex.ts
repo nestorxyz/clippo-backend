@@ -17,6 +17,7 @@ export const api: any = {
   },
   links: {
     registerLinkForBackend: 'links:registerLinkForBackend',
+    findLinkByUrlForBackend: 'links:findLinkByUrlForBackend',
     getRecentLinksForUser: 'links:getRecentLinksForUser',
     updateLinkPreviewForBackend: 'links:updateLinkPreviewForBackend',
   },

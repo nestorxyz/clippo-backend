@@ -32,6 +32,7 @@ interface QuickSaveLinkRequest {
 
 interface QuickSaveLinkResponse {
   linkId: string;
+  duplicate: boolean;
   title: string;
   description: string;
   category: string;
@@ -1314,6 +1315,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
         success: true,
         data: {
           linkId: savedLink.id,
+          duplicate: savedLink.duplicate === true,
           title: savedLink.title,
           description: savedLink.description || '',
           category: savedLink.category || 'personal',
@@ -1528,6 +1530,21 @@ Execute the two-step process to analyze and save this link with appropriate cate
 
       console.log(`📥 Registering link:`, args);
 
+      const existingLink = await convex.query(
+        api.links.findLinkByUrlForBackend,
+        {
+          userId: userId as any,
+          url,
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        },
+      );
+      if (existingLink?.linkId) {
+        return {
+          success: true,
+          data: { id: existingLink.linkId, ...args, duplicate: true },
+        };
+      }
+
       // Quota enforcement (friendly message)
       try {
         const plan: any = await convex.query(api.billing.getPlanForBackend, {
@@ -1579,7 +1596,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
       );
 
       // If we have a remote preview, enqueue background thumbnail processing
-      if (img_preview && result.linkId) {
+      if (img_preview && result.linkId && !result.duplicate) {
         enqueueThumbnailJob({
           userId,
           linkId: result.linkId,
@@ -1589,7 +1606,10 @@ Execute the two-step process to analyze and save this link with appropriate cate
         );
       }
 
-      return { success: true, data: { id: result.linkId, ...args } };
+      return {
+        success: true,
+        data: { id: result.linkId, ...args, duplicate: result.duplicate === true },
+      };
     } catch (error: any) {
       console.error('Register link error:', error);
       return { success: false, error: error.message };

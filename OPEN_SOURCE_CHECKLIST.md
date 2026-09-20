@@ -21,9 +21,8 @@ This checklist prepares the repository; it does not authorize making it public.
 
 ## Required before public visibility
 
-- [ ] Choose and approve an open-source license.
-- [ ] Resolve the existing `package.json` `ISC` metadata against the missing
-      repository license file; do not treat npm-init metadata as owner approval.
+- [x] Owner selected AGPL-3.0-only on 2026-09-19; canonical `LICENSE` added and
+      package metadata aligned.
 - [ ] Rewrite the retired-provider reference from Git history and rerun Gitleaks
       to zero unresolved findings.
 - [x] Inventory transitive dependency licenses and assets in

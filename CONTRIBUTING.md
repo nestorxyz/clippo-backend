@@ -1,8 +1,7 @@
 # Contributing to the DoryAI backend
 
-The repository is private and unlicensed while its open-source release is being
-prepared. Contributions are currently accepted only from explicitly authorized
-collaborators.
+DoryAI is licensed under AGPL-3.0-only. The repository remains private only
+while the approved history cleanup and final publication checks are completed.
 
 ## Development flow
 

@@ -1,7 +1,7 @@
 import { convex, api } from '../config/convex'; // Added Convex import
 import { enqueueThumbnailJob } from './thumbnail.service';
 import { socialMediaService } from './socialMedia.service';
-import { extractWebPage } from './web-page-extractor';
+import { extractWebPageContent } from './web-page-content';
 import { PublicResourceError } from './public-resource';
 import {
   emptyLinkAnalysisState,
@@ -111,7 +111,7 @@ You are a **Link Analysis and Categorization Specialist** embedded in a producti
 - **title**: Use urlMetadata.title from get_url_info result
 - **description**: Use summary from get_url_info result  
 - **img_preview**: Use urlMetadata.image from get_url_info result (ALWAYS include if available)
-- **content**: Use transcript from get_url_info result (ALWAYS include if available)
+- **content**: Use transcript or content from get_url_info result (ALWAYS include if available)
 - **source**: Use platform from get_url_info result (e.g., "Instagram", "TikTok") or infer from URL
 - **category/subcategory/tags**: Infer from content, transcript, and user context
 
@@ -562,7 +562,7 @@ To ensure high-quality data and a great user experience, saving a link is a two-
     -   Map urlMetadata.title to title parameter
     -   Map summary to description parameter  
     -   Map urlMetadata.image to img_preview parameter (ALWAYS include if present)
-    -   Map transcript to content parameter (ALWAYS include if present - especially for social media videos)
+    -   Map transcript or content to content parameter (ALWAYS include if present)
     -   Map platform info to source parameter (e.g., "Instagram", "TikTok")
     -   Infer category, subcategory, and tags based on the user's initial prompt and the content summary.
 
@@ -570,7 +570,7 @@ To ensure high-quality data and a great user experience, saving a link is a two-
 
     **VERIFICATION CHECKLIST before calling register_link:**
     - ✅ Did get_url_info return urlMetadata.image? → Pass as img_preview
-    - ✅ Did get_url_info return transcript? → Pass as content
+    - ✅ Did get_url_info return transcript or content? → Pass it as content
     - ✅ Did get_url_info return platform? → Pass as source
     - ✅ Are all required fields (url, title, description, category) included?
 
@@ -1281,29 +1281,62 @@ Execute the two-step process to analyze and save this link with appropriate cate
   private async getUrlInfo(url: string, focus?: string): Promise<any> {
     try {
       const classifiedSource = classifySourceUrl(url);
-      if (classifiedSource.kind === 'youtube-video') {
+      if (
+        classifiedSource.kind === 'youtube-video' ||
+        classifiedSource.kind === 'youtube-short'
+      ) {
         try {
           const video = await extractYouTubeVideo(url);
+          let transcript = video.transcript;
+          let thumbnailUrl = video.thumbnailUrl;
+          let limitations = [...video.limitations];
+          let transcriptSource:
+            | 'manual'
+            | 'automatic'
+            | 'audio'
+            | 'none' = video.transcriptSource;
+
+          if (classifiedSource.kind === 'youtube-short' && !transcript) {
+            const fallback =
+              await socialMediaService.processSocialMediaVideo(url);
+            if (fallback.success && fallback.info?.transcript) {
+              transcript = fallback.info.transcript;
+              thumbnailUrl = fallback.info.thumbnailUrl || thumbnailUrl;
+              transcriptSource = 'audio';
+              limitations = limitations
+                .filter(
+                  (limitation) =>
+                    limitation !==
+                    'No supported manual or automatic captions were available',
+                )
+                .concat(
+                  'Transcript generated from audio because captions were unavailable',
+                );
+            }
+          }
+
           return {
             success: true,
             summary: video.description || video.title,
             urlMetadata: {
               title: video.title,
               description: video.description,
-              image: video.thumbnailUrl,
+              image: thumbnailUrl,
             },
-            transcript: video.transcript,
+            transcript,
             transcriptLanguage: video.transcriptLanguage,
-            transcriptSource: video.transcriptSource,
+            transcriptSource,
             transcriptTruncated: video.transcriptTruncated,
             platform: 'YouTube',
             channel: video.channel,
             duration: video.duration,
             sourceExtraction: describeSourceExtraction(
               url,
-              'youtube-metadata',
+              transcriptSource === 'audio'
+                ? 'short-video'
+                : 'youtube-metadata',
             ),
-            limitations: video.limitations,
+            limitations,
           };
         } catch (error) {
           console.warn(
@@ -1416,13 +1449,16 @@ Execute the two-step process to analyze and save this link with appropriate cate
         }
       }
 
-      // Standard webpage processing stays deterministic and bounded. Full page
-      // text is not forwarded to Gemini without an explicit privacy decision.
-      const page = await extractWebPage(url);
+      // Native extraction remains metadata-only. When explicitly configured,
+      // Firecrawl contributes bounded markdown content for harder webpages.
+      const page = await extractWebPageContent(url);
       const localSummary = page.description || page.text.slice(0, 500);
-      const sourceExtraction = describeSourceExtraction(url, 'web-page');
+      const sourceExtraction = describeSourceExtraction(
+        url,
+        page.provenance.method === 'firecrawl' ? 'firecrawl' : 'web-page',
+      );
       const limitations = [
-        focus
+        focus && page.provenance.method !== 'firecrawl'
           ? 'Focused AI summarization is not enabled for general webpages'
           : null,
         sourceExtraction.limitation,
@@ -1440,6 +1476,9 @@ Execute the two-step process to analyze and save this link with appropriate cate
         provenance: page.provenance,
         sourceExtraction,
         limitations,
+        ...(page.provenance.method === 'firecrawl'
+          ? { content: page.text }
+          : {}),
       };
     } catch (error: any) {
       console.error('Error analyzing URL:', error);

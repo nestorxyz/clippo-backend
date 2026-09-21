@@ -13,7 +13,7 @@ interface SocialMediaInfo {
   transcript?: string;
   thumbnailUrl?: string;
   duration?: number;
-  platform: 'instagram' | 'tiktok';
+  platform: 'instagram' | 'tiktok' | 'youtube';
 }
 
 interface ProcessingResult {
@@ -72,7 +72,12 @@ export class SocialMediaService {
    */
   isSocialMediaUrl(url: string): boolean {
     try {
-      return classifySourceUrl(url).extractionStrategy === 'short-video';
+      const kind = classifySourceUrl(url).kind;
+      return (
+        kind === 'instagram-reel' ||
+        kind === 'tiktok-video' ||
+        kind === 'youtube-short'
+      );
     } catch {
       return false;
     }
@@ -81,11 +86,14 @@ export class SocialMediaService {
   /**
    * Detect platform from URL
    */
-  private detectPlatform(url: string): 'instagram' | 'tiktok' | null {
+  private detectPlatform(
+    url: string,
+  ): 'instagram' | 'tiktok' | 'youtube' | null {
     try {
       const source = classifySourceUrl(url);
       if (source.kind === 'instagram-reel') return 'instagram';
       if (source.kind === 'tiktok-video') return 'tiktok';
+      if (source.kind === 'youtube-short') return 'youtube';
       return null;
     } catch {
       return null;
@@ -462,7 +470,7 @@ export class SocialMediaService {
    */
   private async processSocialMediaFallback(
     url: string,
-    platform: 'instagram' | 'tiktok',
+    platform: 'instagram' | 'tiktok' | 'youtube',
   ): Promise<ProcessingResult> {
     console.log(`🔄 Using fallback processing for ${platform} URL`);
 
@@ -471,7 +479,11 @@ export class SocialMediaService {
       const result: SocialMediaInfo = {
         title: this.generateFallbackTitle(url, platform),
         description: `${
-          platform === 'instagram' ? 'Instagram Reel' : 'TikTok Video'
+          platform === 'instagram'
+            ? 'Instagram Reel'
+            : platform === 'tiktok'
+              ? 'TikTok Video'
+              : 'YouTube Short'
         } - Content not available due to processing limitations`,
         platform: platform,
         transcript: undefined, // No transcript available in fallback
@@ -494,13 +506,14 @@ export class SocialMediaService {
    */
   private generateFallbackTitle(
     url: string,
-    platform: 'instagram' | 'tiktok',
+    platform: 'instagram' | 'tiktok' | 'youtube',
   ): string {
     if (platform === 'instagram') {
       const match = url.match(/\/reel\/([A-Za-z0-9_-]+)/);
       const reelId = match ? match[1] : 'unknown';
       return `Instagram Reel: ${reelId}`;
-    } else if (platform === 'tiktok') {
+    }
+    if (platform === 'tiktok') {
       const match =
         url.match(/@([^\/]+)\/video\/(\d+)/) ||
         url.match(/vm\.tiktok\.com\/([A-Za-z0-9]+)/);
@@ -510,7 +523,8 @@ export class SocialMediaService {
       }
       return 'TikTok Video';
     }
-    return `${platform} Video`;
+    const match = url.match(/\/shorts\/([A-Za-z0-9_-]+)/);
+    return match ? `YouTube Short: ${match[1]}` : 'YouTube Short';
   }
 }
 

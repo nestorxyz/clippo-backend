@@ -316,8 +316,8 @@ export const extractYouTubeVideo = async (
   dependencies: YouTubeDependencies = {},
 ): Promise<YouTubeExtraction> => {
   const source = classifySourceUrl(input);
-  if (source.kind !== 'youtube-video') {
-    throw new Error('URL must identify a YouTube long video');
+  if (source.kind !== 'youtube-video' && source.kind !== 'youtube-short') {
+    throw new Error('URL must identify a YouTube video or Short');
   }
 
   const getInfo = dependencies.getInfo ?? getDefaultInfo;

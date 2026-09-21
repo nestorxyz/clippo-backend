@@ -175,11 +175,20 @@ test('returns honest metadata-only limitations when captions are unavailable', a
   ]);
 });
 
-test('rejects shorts and playlist-shaped metadata', async () => {
-  await assert.rejects(
-    extractYouTubeVideo('https://youtube.com/shorts/dory123'),
-    /YouTube long video/,
+test('accepts Shorts and rejects playlist-shaped metadata', async () => {
+  const short = await extractYouTubeVideo(
+    'https://youtube.com/shorts/dory123',
+    {
+      getInfo: async (url) => {
+        assert.equal(url, 'https://youtube.com/shorts/dory123');
+        return info;
+      },
+      fetchCaption: async () => manualCaptions,
+    },
   );
+  assert.equal(short.title, 'How DoryAI remembers useful links');
+  assert.equal(short.transcriptSource, 'manual');
+
   await assert.rejects(
     extractYouTubeVideo('https://youtube.com/watch?v=dory123', {
       getInfo: async () => ({ ...info, _type: 'playlist' }),

@@ -12,7 +12,11 @@ test('classifies the source types in the DoryAI roadmap', () => {
       'youtube-metadata',
     ],
     ['https://youtu.be/abc123?t=20', 'youtube-video', 'youtube-metadata'],
-    ['https://youtube.com/shorts/abc123', 'youtube-short', 'planned'],
+    [
+      'https://youtube.com/shorts/abc123',
+      'youtube-short',
+      'youtube-metadata',
+    ],
     ['https://www.linkedin.com/posts/example', 'linkedin', 'planned'],
     ['https://x.com/example/status/123', 'x', 'planned'],
     ['https://twitter.com/example/status/123', 'x', 'planned'],
@@ -102,6 +106,28 @@ test('reports the extraction strategy that actually ran', () => {
       usedStrategy: 'short-video',
       degraded: false,
       limitation: null,
+    },
+  );
+  assert.deepEqual(
+    describeSourceExtraction('https://example.com/app', 'firecrawl'),
+    {
+      kind: 'web-page',
+      usedStrategy: 'firecrawl',
+      degraded: false,
+      limitation: null,
+    },
+  );
+  assert.deepEqual(
+    describeSourceExtraction(
+      'https://youtube.com/shorts/ABC123',
+      'short-video',
+    ),
+    {
+      kind: 'youtube-short',
+      usedStrategy: 'short-video',
+      degraded: true,
+      limitation:
+        'YouTube captions were unavailable; audio transcription fallback was used',
     },
   );
 });

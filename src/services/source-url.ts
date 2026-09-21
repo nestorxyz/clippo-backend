@@ -22,6 +22,7 @@ export interface ClassifiedSourceUrl {
 export type ImplementedExtractionStrategy =
   | 'short-video'
   | 'youtube-metadata'
+  | 'firecrawl'
   | 'web-page'
   | 'url-only';
 
@@ -85,7 +86,7 @@ export const classifySourceUrl = (input: string): ClassifiedSourceUrl => {
     return {
       kind: 'youtube-short',
       normalizedUrl: url.toString(),
-      extractionStrategy: 'planned',
+      extractionStrategy: 'youtube-metadata',
     };
   }
 
@@ -129,6 +130,23 @@ export const describeSourceExtraction = (
   usedStrategy: ImplementedExtractionStrategy,
 ): SourceExtractionResult => {
   const source = classifySourceUrl(input);
+  if (source.kind === 'web-page' && usedStrategy === 'firecrawl') {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: false,
+      limitation: null,
+    };
+  }
+  if (source.kind === 'youtube-short' && usedStrategy === 'short-video') {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: true,
+      limitation:
+        'YouTube captions were unavailable; audio transcription fallback was used',
+    };
+  }
   if (source.extractionStrategy === usedStrategy) {
     return {
       kind: source.kind,

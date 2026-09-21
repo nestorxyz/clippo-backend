@@ -6,6 +6,11 @@ export interface LinkAnalysisState {
   registeredUrls: string[];
 }
 
+export type ChatToolDirective =
+  | { mode: 'auto' }
+  | { mode: 'tool'; name: 'get_url_info' | 'register_link' }
+  | { mode: 'text' };
+
 type GuardResult =
   | { allowed: true }
   | {
@@ -148,4 +153,32 @@ export const nextChatToolRound = (
     );
   }
   return completedRounds + 1;
+};
+
+const containsHttpUrl = (message: string): boolean =>
+  /(?:^|\s)https?:\/\/\S+/i.test(message);
+
+export const selectChatToolDirective = (args: {
+  message: string;
+  linkAnalysis: LinkAnalysisState;
+  registrationAttempted: boolean;
+  retrievalCompleted: boolean;
+}): ChatToolDirective => {
+  if (
+    args.registrationAttempted ||
+    args.retrievalCompleted ||
+    args.linkAnalysis.error
+  ) {
+    return { mode: 'text' };
+  }
+
+  if (args.linkAnalysis.analyzedUrl) {
+    return { mode: 'tool', name: 'register_link' };
+  }
+
+  if (containsHttpUrl(args.message)) {
+    return { mode: 'tool', name: 'get_url_info' };
+  }
+
+  return { mode: 'auto' };
 };

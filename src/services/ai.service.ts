@@ -9,6 +9,7 @@ import {
   nextChatToolRound,
   recordLinkAnalysis,
   recordLinkRegistration,
+  selectChatToolDirective,
 } from './link-registration-guard';
 import { classifySourceUrl, describeSourceExtraction } from './source-url';
 import { extractYouTubeVideo } from './youtube.service';
@@ -23,7 +24,12 @@ import {
 } from './link-retrieval';
 import { ServiceResponse } from '../types';
 
-import { FunctionDeclaration, GoogleGenAI, Type } from '@google/genai';
+import {
+  FunctionCallingConfigMode,
+  FunctionDeclaration,
+  GoogleGenAI,
+  Type,
+} from '@google/genai';
 
 interface QuickSaveLinkRequest {
   url: string;
@@ -899,6 +905,8 @@ export class AIService {
       const functionCallsForClient: any[] = [];
       let continueConversation = true;
       let linkAnalysis = emptyLinkAnalysisState();
+      let registrationAttempted = false;
+      let retrievalCompleted = false;
       let toolRounds = 0;
 
       // Process conversation with function calls
@@ -908,12 +916,31 @@ export class AIService {
           `🔄 AI call ${toolRounds} - ${contents.length} conversation items`,
         );
 
+        const directive = selectChatToolDirective({
+          message,
+          linkAnalysis,
+          registrationAttempted,
+          retrievalCompleted,
+        });
+        const functionCallingConfig =
+          directive.mode === 'tool'
+            ? {
+                mode: FunctionCallingConfigMode.ANY,
+                allowedFunctionNames: [directive.name],
+              }
+            : directive.mode === 'text'
+              ? { mode: FunctionCallingConfigMode.NONE }
+              : undefined;
+
         const result = await genAI.models.generateContent({
           model: modelName,
           contents: contents as any,
           config: {
             systemInstruction,
             tools: [{ functionDeclarations: tools.functionDeclarations }],
+            ...(functionCallingConfig
+              ? { toolConfig: { functionCallingConfig } }
+              : {}),
           },
         });
 
@@ -942,6 +969,7 @@ export class AIService {
             let functionResponse: any;
 
             if (fc.name === 'register_link') {
+              registrationAttempted = true;
               const guard = guardLinkRegistration(
                 linkAnalysis,
                 fc.args?.url,
@@ -957,6 +985,7 @@ export class AIService {
                 functionResponse = guard.response;
               }
             } else if (fc.name === 'get_links') {
+              retrievalCompleted = true;
               const filters = coerceLinkRetrievalFilters(fc.args);
               const linksResult = await this.searchUserLinks(
                 userId,
@@ -1472,7 +1501,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
         if (plan && plan.used >= plan.limit) {
           const upgradeMsg =
             plan.plan === 'free'
-              ? `🚀 Free plan limit reached (${plan.limit} links). Upgrade to Premium for 200 links each period and unlimited organization power.`
+              ? `🚀 Free plan limit reached (${plan.limit} links). Upgrade to Premium for a higher link limit.`
               : `⚠️ You've reached your current subscription period limit (${
                   plan.limit
                 }). It resets on ${new Date(plan.period.end).toLocaleDateString(

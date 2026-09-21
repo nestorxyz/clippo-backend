@@ -6,6 +6,7 @@ import {
   nextChatToolRound,
   recordLinkAnalysis,
   recordLinkRegistration,
+  selectChatToolDirective,
 } from './link-registration-guard';
 
 test('allows the same normalized URL after successful analysis', () => {
@@ -88,4 +89,88 @@ test('bounds chat tool rounds with a legible error', () => {
   assert.equal(nextChatToolRound(0, 2), 1);
   assert.equal(nextChatToolRound(1, 2), 2);
   assert.throws(() => nextChatToolRound(2, 2), /without a final response/);
+});
+
+test('forces the analyze-register-text sequence for URL messages', () => {
+  const initial = emptyLinkAnalysisState();
+  assert.deepEqual(
+    selectChatToolDirective({
+      message: 'Save https://example.com for later',
+      linkAnalysis: initial,
+      registrationAttempted: false,
+      retrievalCompleted: false,
+    }),
+    { mode: 'tool', name: 'get_url_info' },
+  );
+
+  const analyzed = recordLinkAnalysis('https://example.com', { success: true });
+  assert.deepEqual(
+    selectChatToolDirective({
+      message: 'Save https://example.com for later',
+      linkAnalysis: analyzed,
+      registrationAttempted: false,
+      retrievalCompleted: false,
+    }),
+    { mode: 'tool', name: 'register_link' },
+  );
+
+  assert.deepEqual(
+    selectChatToolDirective({
+      message: 'Save https://example.com for later',
+      linkAnalysis: analyzed,
+      registrationAttempted: true,
+      retrievalCompleted: false,
+    }),
+    { mode: 'text' },
+  );
+});
+
+test('forces a final text response after one retrieval', () => {
+  assert.deepEqual(
+    selectChatToolDirective({
+      message: 'Find my saved JavaScript links',
+      linkAnalysis: emptyLinkAnalysisState(),
+      registrationAttempted: false,
+      retrievalCompleted: true,
+    }),
+    { mode: 'text' },
+  );
+});
+
+test('forces a final explanation after analysis or registration failure', () => {
+  const failedAnalysis = recordLinkAnalysis('https://example.com', {
+    success: false,
+    error: 'Page blocked',
+  });
+  assert.deepEqual(
+    selectChatToolDirective({
+      message: 'Save https://example.com',
+      linkAnalysis: failedAnalysis,
+      registrationAttempted: false,
+      retrievalCompleted: false,
+    }),
+    { mode: 'text' },
+  );
+
+  assert.deepEqual(
+    selectChatToolDirective({
+      message: 'Save https://example.com',
+      linkAnalysis: recordLinkAnalysis('https://example.com', { success: true }),
+      registrationAttempted: true,
+      retrievalCompleted: false,
+    }),
+    { mode: 'text' },
+  );
+});
+
+test('allows normal model choice for chat without a URL', () => {
+  assert.deepEqual(
+    selectChatToolDirective({
+      message: 'What can you do?',
+      linkAnalysis: emptyLinkAnalysisState(),
+      registrationAttempted: false,
+      retrievalCompleted: false,
+    }),
+    { mode: 'auto' },
+  );
 });

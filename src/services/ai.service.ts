@@ -1514,7 +1514,12 @@ Execute the two-step process to analyze and save this link with appropriate cate
           };
         }
       } catch (quotaErr) {
-        console.error('Quota check error (continuing):', quotaErr);
+        console.error('Quota check error:', quotaErr);
+        return {
+          success: false,
+          error: 'BILLING_CHECK_FAILED',
+          message: 'Unable to verify your link limit. Please try again.',
+        };
       }
 
       // Call Convex mutation to register the link

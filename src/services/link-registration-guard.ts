@@ -8,7 +8,7 @@ export interface LinkAnalysisState {
 
 export type ChatToolDirective =
   | { mode: 'auto' }
-  | { mode: 'tool'; name: 'get_url_info' | 'register_link' }
+  | { mode: 'tool'; name: 'get_url_info' | 'register_link' | 'get_links' }
   | { mode: 'text' };
 
 type GuardResult =
@@ -158,6 +158,11 @@ export const nextChatToolRound = (
 const containsHttpUrl = (message: string): boolean =>
   /(?:^|\s)https?:\/\/\S+/i.test(message);
 
+const refersToSavedLinks = (message: string): boolean =>
+  /\b(?:saved|bookmarked|my links|my bookmarks|guarde|guardad[oa]s?|mis enlaces|mis links)\b/i.test(
+    message.normalize('NFD').replace(/\p{M}/gu, ''),
+  );
+
 export const selectChatToolDirective = (args: {
   message: string;
   linkAnalysis: LinkAnalysisState;
@@ -178,6 +183,10 @@ export const selectChatToolDirective = (args: {
 
   if (containsHttpUrl(args.message)) {
     return { mode: 'tool', name: 'get_url_info' };
+  }
+
+  if (refersToSavedLinks(args.message)) {
+    return { mode: 'tool', name: 'get_links' };
   }
 
   return { mode: 'auto' };

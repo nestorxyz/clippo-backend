@@ -174,3 +174,15 @@ test('allows normal model choice for chat without a URL', () => {
     { mode: 'auto' },
   );
 });
+
+test('searches stored links before answering questions about saved content', () => {
+  assert.deepEqual(
+    selectChatToolDirective({
+      message: 'Del Short de Alex Hormozi que guardé, ¿cuál es el consejo número 4?',
+      linkAnalysis: emptyLinkAnalysisState(),
+      registrationAttempted: false,
+      retrievalCompleted: false,
+    }),
+    { mode: 'tool', name: 'get_links' },
+  );
+});

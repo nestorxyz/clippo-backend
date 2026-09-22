@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   buildYouTubeMetadataArgs,
   extractYouTubeOEmbed,
+  extractYouTubeWithGemini,
   extractYouTubeVideo,
   type YouTubeMetadata,
 } from './youtube.service';
@@ -252,5 +253,51 @@ test('rejects malformed YouTube oEmbed responses', async () => {
       }),
     }),
     /oEmbed response was invalid/,
+  );
+});
+
+test('uses Gemini video input to create searchable YouTube content', async () => {
+  const result = await extractYouTubeWithGemini(
+    'https://youtube.com/shorts/dory123#share',
+    {
+      createInteraction: async (params) => {
+        assert.equal(params.model, 'gemini-3.8-flash');
+        assert.equal(params.store, false);
+        assert.deepEqual(params.input[1], {
+          type: 'video',
+          uri: 'https://youtube.com/shorts/dory123',
+        });
+        return {
+          status: 'completed',
+          output_text:
+            'Summary: Save useful links.\n\nTranscript: Save useful links without folders.',
+        };
+      },
+    },
+  );
+
+  assert.equal(
+    result.content,
+    'Summary: Save useful links.\n\nTranscript: Save useful links without folders.',
+  );
+  assert.equal(result.truncated, false);
+});
+
+test('rejects incomplete or empty Gemini YouTube analysis', async () => {
+  await assert.rejects(
+    extractYouTubeWithGemini('https://youtu.be/dory123', {
+      createInteraction: async () => ({ status: 'failed' }),
+    }),
+    /did not complete/,
+  );
+
+  await assert.rejects(
+    extractYouTubeWithGemini('https://youtu.be/dory123', {
+      createInteraction: async () => ({
+        status: 'completed',
+        outputs: [{ type: 'text', text: '   ' }],
+      }),
+    }),
+    /returned no content/,
   );
 });

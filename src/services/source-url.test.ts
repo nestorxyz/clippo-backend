@@ -67,6 +67,19 @@ test('reports the extraction strategy that actually ran', () => {
   );
   assert.deepEqual(
     describeSourceExtraction(
+      'https://youtube.com/shorts/ABC123',
+      'youtube-gemini',
+    ),
+    {
+      kind: 'youtube-short',
+      usedStrategy: 'youtube-gemini',
+      degraded: true,
+      limitation:
+        'YouTube blocked direct caption extraction; Gemini video understanding was used',
+    },
+  );
+  assert.deepEqual(
+    describeSourceExtraction(
       'https://youtube.com/watch?v=abc123',
       'youtube-metadata',
     ),

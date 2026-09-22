@@ -13,6 +13,7 @@ const METADATA_MAX_BYTES = 5_000_000;
 const METADATA_TIMEOUT_MS = 30_000;
 const OEMBED_MAX_BYTES = 100_000;
 const OEMBED_TIMEOUT_MS = 8_000;
+const GEMINI_CONTENT_MAX_CHARS = 100_000;
 
 interface CaptionTrack {
   ext: string;
@@ -52,6 +53,33 @@ export interface YouTubeOEmbedExtraction {
   title: string;
   channel: string | null;
   thumbnailUrl: string | null;
+}
+
+interface GeminiTextOutput {
+  type: string;
+  text?: string;
+}
+
+interface GeminiYouTubeInteraction {
+  status: string;
+  output_text?: string;
+  outputs?: GeminiTextOutput[];
+}
+
+export interface YouTubeGeminiDependencies {
+  createInteraction: (params: {
+    model: string;
+    input: Array<
+      | { type: 'text'; text: string }
+      | { type: 'video'; uri: string }
+    >;
+    generation_config: {
+      max_output_tokens: number;
+      temperature: number;
+    };
+    store: false;
+  }) => Promise<GeminiYouTubeInteraction>;
+  model?: string;
 }
 
 export interface YouTubeDependencies {
@@ -361,6 +389,61 @@ export const extractYouTubeOEmbed = async (
         ? payload.author_name.trim() || null
         : null,
     thumbnailUrl: safeThumbnail(payload.thumbnail_url),
+  };
+};
+
+export const extractYouTubeWithGemini = async (
+  input: string,
+  dependencies: YouTubeGeminiDependencies,
+): Promise<{ content: string; truncated: boolean }> => {
+  const source = classifySourceUrl(input);
+  if (source.kind !== 'youtube-video' && source.kind !== 'youtube-short') {
+    throw new Error('URL must identify a YouTube video or Short');
+  }
+
+  const interaction = await dependencies.createInteraction({
+    model: dependencies.model ?? 'gemini-3.8-flash',
+    input: [
+      {
+        type: 'text',
+        text: [
+          'Create a faithful content record for this video so it can be searched and answered about later.',
+          'Include a concise summary, the complete spoken transcript in the original language, meaningful on-screen text, and only important non-verbal context.',
+          'Do not infer speech or details that are not present. Clearly label summary, transcript, on-screen text, and visual context.',
+        ].join(' '),
+      },
+      {
+        type: 'video',
+        uri: source.normalizedUrl,
+      },
+    ],
+    generation_config: {
+      max_output_tokens: 16_384,
+      temperature: 0,
+    },
+    store: false,
+  });
+
+  if (interaction.status !== 'completed') {
+    throw new Error('Gemini YouTube analysis did not complete');
+  }
+
+  const content =
+    interaction.output_text?.trim() ||
+    (interaction.outputs ?? [])
+      .filter(
+        (output) => output.type === 'text' && typeof output.text === 'string',
+      )
+      .map((output) => output.text?.trim() ?? '')
+      .filter(Boolean)
+      .join('\n\n');
+  if (!content) {
+    throw new Error('Gemini YouTube analysis returned no content');
+  }
+
+  return {
+    content: content.slice(0, GEMINI_CONTENT_MAX_CHARS),
+    truncated: content.length > GEMINI_CONTENT_MAX_CHARS,
   };
 };
 

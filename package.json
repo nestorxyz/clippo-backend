@@ -18,7 +18,7 @@
     "node": ">=22.0.0"
   },
   "dependencies": {
-    "@google/genai": "^1.6.0",
+    "@google/genai": "^2.23.0",
     "@types/fluent-ffmpeg": "^2.1.27",
     "@types/node-fetch": "^2.6.12",
     "convex": "^1.31.4",

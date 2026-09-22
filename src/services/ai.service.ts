@@ -14,6 +14,7 @@ import {
 import { classifySourceUrl, describeSourceExtraction } from './source-url';
 import {
   extractYouTubeOEmbed,
+  extractYouTubeWithGemini,
   extractYouTubeVideo,
 } from './youtube.service';
 import { extractRestrictedPlatform } from './restricted-platform.service';
@@ -1348,15 +1349,35 @@ Execute the two-step process to analyze and save this link with appropriate cate
           );
           try {
             const fallback = await extractYouTubeOEmbed(url);
+            let content: string | null = null;
+            let contentTruncated = false;
+            let usedStrategy: 'youtube-gemini' | 'youtube-oembed' =
+              'youtube-oembed';
+            try {
+              const analysis = await extractYouTubeWithGemini(url, {
+                createInteraction: (params) =>
+                  genAI.interactions.create(params),
+              });
+              content = analysis.content;
+              contentTruncated = analysis.truncated;
+              usedStrategy = 'youtube-gemini';
+            } catch (analysisError) {
+              console.warn(
+                'Gemini YouTube video analysis failed; using metadata only:',
+                analysisError,
+              );
+            }
             const sourceExtraction = describeSourceExtraction(
               url,
-              'youtube-oembed',
+              usedStrategy,
             );
             return {
               success: true,
-              summary: fallback.channel
-                ? `${fallback.title} by ${fallback.channel}`
-                : fallback.title,
+              summary:
+                content ||
+                (fallback.channel
+                  ? `${fallback.title} by ${fallback.channel}`
+                  : fallback.title),
               urlMetadata: {
                 title: fallback.title,
                 description: fallback.channel
@@ -1364,10 +1385,10 @@ Execute the two-step process to analyze and save this link with appropriate cate
                   : 'YouTube video',
                 image: fallback.thumbnailUrl,
               },
-              transcript: null,
+              transcript: content,
               transcriptLanguage: null,
-              transcriptSource: 'none',
-              transcriptTruncated: false,
+              transcriptSource: content ? 'ai-video-analysis' : 'none',
+              transcriptTruncated: contentTruncated,
               platform: 'YouTube',
               channel: fallback.channel,
               duration: null,
@@ -1587,6 +1608,14 @@ Execute the two-step process to analyze and save this link with appropriate cate
         },
       );
       if (existingLink?.linkId) {
+        if (content && !existingLink.hasContent) {
+          await convex.mutation(api.links.enrichLinkContentForBackend, {
+            userId: userId as any,
+            linkId: existingLink.linkId,
+            content,
+            secret: process.env.CONVEX_BACKEND_SECRET,
+          });
+        }
         return {
           success: true,
           data: { id: existingLink.linkId, ...args, duplicate: true },

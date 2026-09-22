@@ -22,6 +22,7 @@ export interface ClassifiedSourceUrl {
 export type ImplementedExtractionStrategy =
   | 'short-video'
   | 'youtube-metadata'
+  | 'youtube-gemini'
   | 'youtube-oembed'
   | 'firecrawl'
   | 'web-page'
@@ -146,6 +147,18 @@ export const describeSourceExtraction = (
       degraded: true,
       limitation:
         'YouTube captions were unavailable; audio transcription fallback was used',
+    };
+  }
+  if (
+    (source.kind === 'youtube-video' || source.kind === 'youtube-short') &&
+    usedStrategy === 'youtube-gemini'
+  ) {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: true,
+      limitation:
+        'YouTube blocked direct caption extraction; Gemini video understanding was used',
     };
   }
   if (

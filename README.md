@@ -70,8 +70,10 @@ metadata plus manual captions when available, falling back to explicitly
 labeled automatic captions. When a Short has no captions, DoryAI reuses the
 existing bounded short-video audio transcription path; a failed audio fallback
 remains metadata-only. If YouTube blocks the server-side metadata process,
-DoryAI uses bounded YouTube oEmbed metadata and does not treat the video as a
-general webpage. LinkedIn and X remain specialized-extractor work and use
+DoryAI combines bounded oEmbed metadata with Gemini's direct public-YouTube
+video understanding to save a summary and transcript. If Gemini cannot analyze
+the video, the result is explicitly metadata-only. YouTube is never treated as
+a general webpage. LinkedIn and X remain specialized-extractor work and use
 explicitly degraded webpage metadata fallback. Arbitrary HTTP(S) URLs use the
 general web-page boundary. That
 boundary pins each request and redirect to a validated public DNS address,

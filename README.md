@@ -69,7 +69,9 @@ video processor. YouTube videos and Shorts use bounded, cookie-free yt-dlp
 metadata plus manual captions when available, falling back to explicitly
 labeled automatic captions. When a Short has no captions, DoryAI reuses the
 existing bounded short-video audio transcription path; a failed audio fallback
-remains metadata-only. LinkedIn and X remain specialized-extractor work and use
+remains metadata-only. If YouTube blocks the server-side metadata process,
+DoryAI uses bounded YouTube oEmbed metadata and does not treat the video as a
+general webpage. LinkedIn and X remain specialized-extractor work and use
 explicitly degraded webpage metadata fallback. Arbitrary HTTP(S) URLs use the
 general web-page boundary. That
 boundary pins each request and redirect to a validated public DNS address,

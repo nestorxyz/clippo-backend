@@ -4,9 +4,11 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   buildYouTubeMetadataArgs,
+  extractYouTubeOEmbed,
   extractYouTubeVideo,
   type YouTubeMetadata,
 } from './youtube.service';
+import type { ResolvedAddress } from './public-resource';
 
 const fixtureDirectory = join(__dirname, '__fixtures__');
 const info = JSON.parse(
@@ -20,6 +22,7 @@ const automaticCaptions = readFileSync(
   join(fixtureDirectory, 'youtube-auto-captions.json'),
   'utf8',
 );
+const publicAddress: ResolvedAddress = { address: '142.250.72.206', family: 4 };
 
 test('builds a bounded cookie-free metadata command', () => {
   const args = buildYouTubeMetadataArgs(
@@ -194,5 +197,60 @@ test('accepts Shorts and rejects playlist-shaped metadata', async () => {
       getInfo: async () => ({ ...info, _type: 'playlist' }),
     }),
     /single video/,
+  );
+});
+
+test('uses bounded YouTube oEmbed metadata without reading the video webpage', async () => {
+  const result = await extractYouTubeOEmbed(
+    'https://youtube.com/shorts/H1e5BhMmmi0?si=share-token',
+    {
+      resolveHostname: async (hostname) => {
+        assert.equal(hostname, 'www.youtube.com');
+        return [publicAddress];
+      },
+      requestResource: async (url, address, limits) => {
+        assert.deepEqual(address, publicAddress);
+        assert.equal(url.pathname, '/oembed');
+        assert.equal(url.searchParams.get('format'), 'json');
+        assert.equal(
+          url.searchParams.get('url'),
+          'https://youtube.com/shorts/H1e5BhMmmi0?si=share-token',
+        );
+        assert.equal(limits.maxBytes, 100_000);
+        return {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: Buffer.from(
+            JSON.stringify({
+              type: 'video',
+              title: 'Before You Make Content WATCH THIS',
+              author_name: 'Alex Hormozi',
+              thumbnail_url:
+                'https://i.ytimg.com/vi/H1e5BhMmmi0/hq2.jpg',
+            }),
+          ),
+        };
+      },
+    },
+  );
+
+  assert.deepEqual(result, {
+    title: 'Before You Make Content WATCH THIS',
+    channel: 'Alex Hormozi',
+    thumbnailUrl: 'https://i.ytimg.com/vi/H1e5BhMmmi0/hq2.jpg',
+  });
+});
+
+test('rejects malformed YouTube oEmbed responses', async () => {
+  await assert.rejects(
+    extractYouTubeOEmbed('https://youtube.com/shorts/dory123', {
+      resolveHostname: async () => [publicAddress],
+      requestResource: async () => ({
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from(JSON.stringify({ type: 'photo' })),
+      }),
+    }),
+    /oEmbed response was invalid/,
   );
 });

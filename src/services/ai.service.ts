@@ -12,7 +12,10 @@ import {
   selectChatToolDirective,
 } from './link-registration-guard';
 import { classifySourceUrl, describeSourceExtraction } from './source-url';
-import { extractYouTubeVideo } from './youtube.service';
+import {
+  extractYouTubeOEmbed,
+  extractYouTubeVideo,
+} from './youtube.service';
 import { extractRestrictedPlatform } from './restricted-platform.service';
 import {
   coerceLinkRetrievalFilters,
@@ -1340,9 +1343,69 @@ Execute the two-step process to analyze and save this link with appropriate cate
           };
         } catch (error) {
           console.warn(
-            'YouTube metadata extraction failed; using webpage fallback:',
+            'YouTube metadata extraction failed; using oEmbed fallback:',
             error,
           );
+          try {
+            const fallback = await extractYouTubeOEmbed(url);
+            const sourceExtraction = describeSourceExtraction(
+              url,
+              'youtube-oembed',
+            );
+            return {
+              success: true,
+              summary: fallback.channel
+                ? `${fallback.title} by ${fallback.channel}`
+                : fallback.title,
+              urlMetadata: {
+                title: fallback.title,
+                description: fallback.channel
+                  ? `YouTube video by ${fallback.channel}`
+                  : 'YouTube video',
+                image: fallback.thumbnailUrl,
+              },
+              transcript: null,
+              transcriptLanguage: null,
+              transcriptSource: 'none',
+              transcriptTruncated: false,
+              platform: 'YouTube',
+              channel: fallback.channel,
+              duration: null,
+              sourceExtraction,
+              limitations: sourceExtraction.limitation
+                ? [sourceExtraction.limitation]
+                : [],
+            };
+          } catch (fallbackError) {
+            console.warn('YouTube oEmbed fallback failed:', fallbackError);
+            const sourceExtraction = describeSourceExtraction(url, 'url-only');
+            return {
+              success: true,
+              summary:
+                classifiedSource.kind === 'youtube-short'
+                  ? 'YouTube Short'
+                  : 'YouTube video',
+              urlMetadata: {
+                title:
+                  classifiedSource.kind === 'youtube-short'
+                    ? 'YouTube Short'
+                    : 'YouTube video',
+                description: '',
+                image: null,
+              },
+              transcript: null,
+              transcriptLanguage: null,
+              transcriptSource: 'none',
+              transcriptTruncated: false,
+              platform: 'YouTube',
+              channel: null,
+              duration: null,
+              sourceExtraction,
+              limitations: sourceExtraction.limitation
+                ? [sourceExtraction.limitation]
+                : [],
+            };
+          }
         }
       }
 

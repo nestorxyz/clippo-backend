@@ -22,6 +22,7 @@ export interface ClassifiedSourceUrl {
 export type ImplementedExtractionStrategy =
   | 'short-video'
   | 'youtube-metadata'
+  | 'youtube-oembed'
   | 'firecrawl'
   | 'web-page'
   | 'url-only';
@@ -145,6 +146,18 @@ export const describeSourceExtraction = (
       degraded: true,
       limitation:
         'YouTube captions were unavailable; audio transcription fallback was used',
+    };
+  }
+  if (
+    (source.kind === 'youtube-video' || source.kind === 'youtube-short') &&
+    usedStrategy === 'youtube-oembed'
+  ) {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: true,
+      limitation:
+        'Full YouTube metadata and captions were unavailable; oEmbed metadata was used',
     };
   }
   if (source.extractionStrategy === usedStrategy) {

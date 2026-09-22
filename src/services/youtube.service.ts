@@ -1,6 +1,9 @@
 import { YtDlp } from 'ytdlp-nodejs';
 import { spawn } from 'node:child_process';
-import { fetchPublicResource } from './public-resource';
+import {
+  fetchPublicResource,
+  type PublicResourceDependencies,
+} from './public-resource';
 import { classifySourceUrl } from './source-url';
 
 const CAPTION_MAX_BYTES = 2_000_000;
@@ -8,6 +11,8 @@ const CAPTION_MAX_CHARS = 100_000;
 const CAPTION_TIMEOUT_MS = 10_000;
 const METADATA_MAX_BYTES = 5_000_000;
 const METADATA_TIMEOUT_MS = 30_000;
+const OEMBED_MAX_BYTES = 100_000;
+const OEMBED_TIMEOUT_MS = 8_000;
 
 interface CaptionTrack {
   ext: string;
@@ -41,6 +46,12 @@ export interface YouTubeExtraction {
   transcriptSource: 'manual' | 'automatic' | 'none';
   transcriptTruncated: boolean;
   limitations: string[];
+}
+
+export interface YouTubeOEmbedExtraction {
+  title: string;
+  channel: string | null;
+  thumbnailUrl: string | null;
 }
 
 export interface YouTubeDependencies {
@@ -309,6 +320,48 @@ const safeThumbnail = (value: unknown): string | null => {
   } catch {
     return null;
   }
+};
+
+export const extractYouTubeOEmbed = async (
+  input: string,
+  dependencies: PublicResourceDependencies = {},
+): Promise<YouTubeOEmbedExtraction> => {
+  const source = classifySourceUrl(input);
+  if (source.kind !== 'youtube-video' && source.kind !== 'youtube-short') {
+    throw new Error('URL must identify a YouTube video or Short');
+  }
+
+  const endpoint = new URL('https://www.youtube.com/oembed');
+  endpoint.searchParams.set('url', source.normalizedUrl);
+  endpoint.searchParams.set('format', 'json');
+  const resource = await fetchPublicResource(
+    endpoint.toString(),
+    {
+      accept: 'application/json',
+      maxBytes: OEMBED_MAX_BYTES,
+      maxRedirects: 2,
+      timeoutMs: OEMBED_TIMEOUT_MS,
+    },
+    dependencies,
+  );
+  const payload = JSON.parse(resource.body.toString('utf8')) as {
+    type?: unknown;
+    title?: unknown;
+    author_name?: unknown;
+    thumbnail_url?: unknown;
+  };
+  if (payload.type !== 'video' || typeof payload.title !== 'string') {
+    throw new Error('YouTube oEmbed response was invalid');
+  }
+
+  return {
+    title: payload.title.trim() || 'Untitled YouTube video',
+    channel:
+      typeof payload.author_name === 'string'
+        ? payload.author_name.trim() || null
+        : null,
+    thumbnailUrl: safeThumbnail(payload.thumbnail_url),
+  };
 };
 
 export const extractYouTubeVideo = async (

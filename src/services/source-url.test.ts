@@ -130,4 +130,17 @@ test('reports the extraction strategy that actually ran', () => {
         'YouTube captions were unavailable; audio transcription fallback was used',
     },
   );
+  assert.deepEqual(
+    describeSourceExtraction(
+      'https://youtube.com/shorts/ABC123',
+      'youtube-oembed',
+    ),
+    {
+      kind: 'youtube-short',
+      usedStrategy: 'youtube-oembed',
+      degraded: true,
+      limitation:
+        'Full YouTube metadata and captions were unavailable; oEmbed metadata was used',
+    },
+  );
 });

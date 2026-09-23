@@ -1534,9 +1534,11 @@ Execute the two-step process to analyze and save this link with appropriate cate
         }
       }
 
-      // Save bounded page text from either extractor. Firecrawl remains an
-      // optional fallback for pages the native extractor cannot read well.
-      const page = await extractWebPageContent(url);
+      // Firecrawl runs only while saving a general webpage, never for
+      // retrieval or a social-media fallback.
+      const page = await extractWebPageContent(url, {
+        allowFirecrawl: classifiedSource.kind === 'web-page',
+      });
       return toWebPageAnalysis(url, page, focus);
     } catch (error: any) {
       console.error('Error analyzing URL:', error);

@@ -18,10 +18,22 @@ export type WebPageContent = WebPageExtraction | FirecrawlExtraction;
 export interface WebPageContentDependencies {
   native?: PublicResourceDependencies;
   firecrawl?: FirecrawlDependencies;
+  allowFirecrawl?: boolean;
 }
 
-const needsRenderedContent = (page: WebPageExtraction): boolean =>
-  page.text.length < 500 || (!page.description && page.text.length < 1_000);
+const hasSensitiveUrlParameters = (input: string): boolean => {
+  try {
+    const url = new URL(input);
+    if (url.username || url.password) return true;
+    return [...url.searchParams.keys()].some((key) =>
+      /^(?:access[_-]?token|auth(?:orization)?|api[_-]?key|key|secret|password|passcode|otp|code|state|session|sig(?:nature)?|token)$/i.test(
+        key,
+      ),
+    );
+  } catch {
+    return true;
+  }
+};
 
 const canUseFirecrawlAfter = (error: unknown): boolean =>
   error instanceof PublicResourceError &&
@@ -33,24 +45,32 @@ export const extractWebPageContent = async (
   input: string,
   dependencies: WebPageContentDependencies = {},
 ): Promise<WebPageContent> => {
-  const firecrawlConfigured = hasFirecrawlConfiguration(
-    dependencies.firecrawl?.apiKey,
-  );
+  const firecrawlConfigured =
+    dependencies.allowFirecrawl === true &&
+    hasFirecrawlConfiguration(dependencies.firecrawl?.apiKey) &&
+    !hasSensitiveUrlParameters(input);
 
   let nativePage: WebPageExtraction;
   try {
     nativePage = await extractWebPage(input, dependencies.native);
   } catch (error) {
     if (!firecrawlConfigured || !canUseFirecrawlAfter(error)) throw error;
-    return extractWithFirecrawl(input, dependencies.firecrawl);
+    const targetUrl = new URL(input);
+    targetUrl.hash = '';
+    return extractWithFirecrawl(targetUrl.toString(), dependencies.firecrawl);
   }
 
-  if (!firecrawlConfigured || !needsRenderedContent(nativePage)) {
+  if (!firecrawlConfigured || hasSensitiveUrlParameters(nativePage.finalUrl)) {
     return nativePage;
   }
 
   try {
-    return await extractWithFirecrawl(input, dependencies.firecrawl);
+    const targetUrl = new URL(nativePage.finalUrl);
+    targetUrl.hash = '';
+    return await extractWithFirecrawl(
+      targetUrl.toString(),
+      dependencies.firecrawl,
+    );
   } catch {
     return nativePage;
   }

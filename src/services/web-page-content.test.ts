@@ -27,7 +27,7 @@ const firecrawlRequest = (markdown: string) =>
       }),
     }) as Response);
 
-test('keeps rich native HTML without calling Firecrawl', async () => {
+test('does not call Firecrawl outside the explicit save path', async () => {
   let firecrawlCalled = false;
   const result = await extractWebPageContent('https://example.com', {
     native: nativeDependencies(
@@ -46,16 +46,22 @@ test('keeps rich native HTML without calling Firecrawl', async () => {
   assert.equal(firecrawlCalled, false);
 });
 
-test('uses Firecrawl for sparse or unavailable public webpages', async () => {
-  const sparse = await extractWebPageContent('https://example.com/sparse', {
-    native: nativeDependencies('<title>Sparse</title><p>Loading</p>'),
+test('uses Firecrawl for rich public webpages while saving', async () => {
+  const rich = await extractWebPageContent('https://example.com/article', {
+    native: nativeDependencies(
+      `<title>Native</title><meta name="description" content="Description">${'useful '.repeat(150)}`,
+    ),
     firecrawl: {
       apiKey: 'test-key',
-      request: firecrawlRequest('Rendered sparse content'),
+      request: firecrawlRequest('Clean article body'),
     },
+    allowFirecrawl: true,
   });
-  assert.equal(sparse.provenance.method, 'firecrawl');
+  assert.equal(rich.provenance.method, 'firecrawl');
+  assert.equal(rich.text, 'Clean article body');
+});
 
+test('uses Firecrawl for unavailable public webpages while saving', async () => {
   const failedNative = await extractWebPageContent('https://example.com/down', {
     native: {
       resolveHostname: async () => [publicAddress],
@@ -67,6 +73,7 @@ test('uses Firecrawl for sparse or unavailable public webpages', async () => {
       apiKey: 'test-key',
       request: firecrawlRequest('Rendered after native failure'),
     },
+    allowFirecrawl: true,
   });
   assert.equal(failedNative.provenance.method, 'firecrawl');
 });
@@ -82,6 +89,7 @@ test('does not let Firecrawl bypass private-address validation', async () => {
           throw new Error('should not run');
         }),
       },
+      allowFirecrawl: true,
     }),
     (error: unknown) =>
       error instanceof PublicResourceError && error.code === 'BLOCKED_ADDRESS',
@@ -100,8 +108,29 @@ test('retains native metadata when optional Firecrawl enhancement fails', async 
         throw new Error('provider unavailable');
       }),
     },
+    allowFirecrawl: true,
   });
 
   assert.equal(result.provenance.method, 'server-html');
   assert.equal(result.title, 'Native fallback');
+});
+
+test('does not transmit credential-shaped URL parameters to Firecrawl', async () => {
+  let firecrawlCalled = false;
+  const result = await extractWebPageContent(
+    'https://example.com/article?access_token=private',
+    {
+      native: nativeDependencies('<title>Private URL</title><p>Public page</p>'),
+      firecrawl: {
+        apiKey: 'test-key',
+        request: (async () => {
+          firecrawlCalled = true;
+          throw new Error('should not run');
+        }),
+      },
+      allowFirecrawl: true,
+    },
+  );
+  assert.equal(result.provenance.method, 'server-html');
+  assert.equal(firecrawlCalled, false);
 });

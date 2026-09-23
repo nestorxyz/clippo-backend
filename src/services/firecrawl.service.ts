@@ -83,6 +83,7 @@ export const extractWithFirecrawl = async (
         url: input,
         formats: ['markdown'],
         onlyMainContent: true,
+        proxy: 'basic',
         timeout: 20_000,
       }),
       signal: controller.signal,

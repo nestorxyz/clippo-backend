@@ -44,9 +44,11 @@ FIRECRAWL_API_KEY=
 required Gemini or Convex configuration.
 
 `FIRECRAWL_API_KEY` is optional and server-only. When unset, general webpages
-use the native guarded HTML extractor. When set, DoryAI uses Firecrawl only for
-sparse or otherwise unsupported public webpages, and keeps at most 20,000
-characters of main-content markdown.
+use the native guarded HTML extractor and save at most 20,000 characters of
+page text. When set, DoryAI uses Firecrawl only for sparse or otherwise
+unsupported public webpages, and keeps at most 20,000 characters of
+main-content markdown. Firecrawl uses its basic proxy to avoid automatic
+enhanced-proxy credit charges.
 
 ## Commands
 
@@ -81,11 +83,11 @@ accepts only standard HTTP(S) ports and HTML, and enforces timeout and
 response-size limits. The same guarded transport protects caption and remote
 thumbnail downloads.
 
-General webpages prefer deterministic page metadata and a short local excerpt.
-If Firecrawl is explicitly configured, sparse or unsupported public webpages
-can send their URL to Firecrawl and return bounded main-content markdown to the
-existing Gemini save workflow. Fixture and read-only extraction proof is not a
-live save/readback.
+General webpages save deterministic page metadata plus bounded page text. If
+Firecrawl is explicitly configured, sparse or unsupported public webpages can
+send their URL to Firecrawl and save bounded main-content markdown. The native
+text is a fallback, not a clean article extraction; a successful fixture or
+read-only extraction check is not a live save/readback.
 
 ## Security and publication
 

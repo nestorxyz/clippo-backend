@@ -49,6 +49,7 @@ test('requests bounded main-content markdown and normalizes metadata', async () 
     url: 'https://example.com/article',
     formats: ['markdown'],
     onlyMainContent: true,
+    proxy: 'basic',
     timeout: 20_000,
   });
   assert.equal(result.title, 'Useful article');

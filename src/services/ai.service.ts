@@ -2,6 +2,7 @@ import { convex, api } from '../config/convex'; // Added Convex import
 import { enqueueThumbnailJob } from './thumbnail.service';
 import { socialMediaService } from './socialMedia.service';
 import { extractWebPageContent } from './web-page-content';
+import { toWebPageAnalysis } from './web-page-analysis';
 import { PublicResourceError } from './public-resource';
 import {
   emptyLinkAnalysisState,
@@ -1533,37 +1534,10 @@ Execute the two-step process to analyze and save this link with appropriate cate
         }
       }
 
-      // Native extraction remains metadata-only. When explicitly configured,
-      // Firecrawl contributes bounded markdown content for harder webpages.
+      // Save bounded page text from either extractor. Firecrawl remains an
+      // optional fallback for pages the native extractor cannot read well.
       const page = await extractWebPageContent(url);
-      const localSummary = page.description || page.text.slice(0, 500);
-      const sourceExtraction = describeSourceExtraction(
-        url,
-        page.provenance.method === 'firecrawl' ? 'firecrawl' : 'web-page',
-      );
-      const limitations = [
-        focus && page.provenance.method !== 'firecrawl'
-          ? 'Focused AI summarization is not enabled for general webpages'
-          : null,
-        sourceExtraction.limitation,
-      ].filter((limitation): limitation is string => limitation !== null);
-
-      return {
-        success: true,
-        summary: localSummary,
-        urlMetadata: {
-          title: page.title,
-          description: page.description,
-          image: page.imageUrl,
-        },
-        finalUrl: page.finalUrl,
-        provenance: page.provenance,
-        sourceExtraction,
-        limitations,
-        ...(page.provenance.method === 'firecrawl'
-          ? { content: page.text }
-          : {}),
-      };
+      return toWebPageAnalysis(url, page, focus);
     } catch (error: any) {
       console.error('Error analyzing URL:', error);
       return {

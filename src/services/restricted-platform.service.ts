@@ -1,6 +1,6 @@
 import { extractWebPage, type WebPageExtraction } from './web-page-extractor';
 import { classifySourceUrl, type SourceKind } from './source-url';
-import { extractXEmbed, hasUsefulXContext, type XEmbedExtraction } from './x-embed.service';
+import { hasUsefulXContext, type XEmbedExtraction } from './x-embed.service';
 
 type RestrictedSourceKind = Extract<SourceKind, 'linkedin' | 'x'>;
 
@@ -63,15 +63,9 @@ export const extractRestrictedPlatform = async (
   }
 
   const platform = platformName(source.kind);
-  if (
-    source.kind === 'x' &&
-    (dependencies.extractXPost !== undefined ||
-      process.env.X_OEMBED_INGESTION_ENABLED === 'true')
-  ) {
+  if (source.kind === 'x' && dependencies.extractXPost !== undefined) {
     try {
-      const post = await (dependencies.extractXPost ?? extractXEmbed)(
-        source.normalizedUrl,
-      );
+      const post = await dependencies.extractXPost(source.normalizedUrl);
       if (hasUsefulXContext(post.snippet)) {
         const author = post.handle ? `@${post.handle}` : post.authorName;
         return {

@@ -45,9 +45,9 @@ test('returns honest URL-only metadata when X blocks extraction', async () => {
   assert.match(result.summary, /URL-only metadata/);
 });
 
-test('keeps the X embed pilot disabled by default', async () => {
+test('does not activate raw X snippet storage from an environment switch', async () => {
   const previous = process.env.X_OEMBED_INGESTION_ENABLED;
-  delete process.env.X_OEMBED_INGESTION_ENABLED;
+  process.env.X_OEMBED_INGESTION_ENABLED = 'true';
   try {
     const result = await extractRestrictedPlatform(
       'https://x.com/dory/status/123',

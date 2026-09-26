@@ -1,15 +1,17 @@
 # X link ingestion: storage and release boundary
 
-Status: design review, 2026-09-26. The oEmbed adapter can be exercised only
-through an injected test dependency; runtime activation was removed. Its
-passing tests and public responses do not prove a safe persisted-content
-lifecycle.
+Status: verbatim-snippet direction selected by the owner on 2026-09-26;
+implementation remains gated. The oEmbed adapter can be exercised only through
+an injected test dependency; runtime activation was removed. Its passing tests
+and public responses do not prove a safe persisted-content lifecycle.
 
 ## Product target
 
-Identify what a saved public X post is about without buying X API access or
-claiming to read quoted posts, threads, images, or video. Firecrawl remains
-reserved for general webpages during link saving.
+Retain a bounded, attributed excerpt of a public X post so a saved link is
+recognizable and later retrieval can use its actual text. Do not claim to read
+quoted posts, threads, images, or video. Firecrawl remains reserved for general
+webpages during link saving. The earlier no-paid-X preference is still in
+effect until the owner explicitly changes it.
 
 ## Current data path
 
@@ -31,7 +33,7 @@ Deleting or refreshing `links.content` alone therefore cannot remove all
 stored copies. Neither repository currently records X post provenance for
 every derived field or message.
 
-## Candidate A: transient topic classification (preferred no-paid path)
+## Alternative A: transient topic classification (not selected)
 
 - Use oEmbed only during the save request. Do not store verbatim post text,
   embed HTML, or the raw tool response in Convex or logs.
@@ -46,7 +48,7 @@ every derived field or message.
   product Privacy notice before release. This is risk reduction, not a legal
   determination that the labels are exempt from content rules.
 
-## Candidate B: retain a verbatim snippet
+## Selected direction B: retain a verbatim snippet
 
 - Record post ID, source, last verification time, and every destination that
   may contain post-derived text. Update or remove title, description, content,
@@ -56,12 +58,43 @@ every derived field or message.
   timely processing procedure. Fail closed when the current public state
   cannot be established; a transient oEmbed failure must not masquerade as a
   confirmed deletion or a current snapshot.
-- Prove the refresh source can detect edits and all unavailable states. X's
-  public oEmbed output has not been shown to provide reliable edit history or
-  current-version identity; polling it alone is not accepted as proof.
+- Use a current-source lookup that reports availability and edit history. X's
+  [Post Lookup documentation](https://docs.x.com/x-api/posts/lookup/introduction)
+  identifies the official endpoint for both; public oEmbed has not been shown
+  to provide reliable current-version identity. Polling oEmbed alone is not
+  accepted as proof. X's display policy also calls for the API when not using
+  X for Websites.
 - Test edit, delete, protect, provider error, retries, every storage copy, and
-  authenticated save/readback before enabling the feature flag. This path may
-  require X API access or another approved source and legal review.
+  authenticated save/readback before wiring the adapter into runtime. The
+  official API requires approved access and prepaid credits. The owner's prior
+  no-paid-X instruction does not authorize that purchase or ongoing spend.
+
+### Implementation order after provider/cost approval
+
+1. Add source provenance to a link: original post ID, current version ID,
+   author, last verified time, and availability. Keep one canonical verbatim
+   snippet. Do not duplicate it in title, description, taxonomy, or logs.
+2. Keep the original tool response and model-supplied `register_link` content
+   out of durable chat history. For later answers, either store references to
+   source IDs and resolve against current content, or tag every dependent
+   message so edits/deletions can purge it. Test both chat and the separate
+   save endpoint.
+3. Schedule bounded Post Lookup refreshes with a per-cycle spending cap. On a
+   confirmed edit, replace the snippet and invalidate dependent text; on a
+   confirmed deletion/protected/withheld state, remove it. On an uncertain
+   provider failure, hide the snippet until verification succeeds rather than
+   asserting deletion or serving stale text.
+4. Provide an authenticated/operator removal path and a dated request log.
+   Test a removal request across links, chat history, and search results.
+5. Run local and CI checks, then a development-only authenticated save,
+   Convex readback, source change/removal simulation, and grounded retrieval.
+   Production remains a separate approval gate.
+
+At [current published X API rates](https://docs.x.com/x-api/getting-started/pricing),
+a Post read is listed at $0.005 per returned resource, with deduplication
+within a UTC day. As an illustration, one daily check of 500 distinct saved X
+posts for 30 days would be about $75 before any other billable reads. This is
+not a spend authorization or a forecast of DoryAI usage.
 
 X's [Developer Policy](https://docs.x.com/developer-terms/policy) states that
 stored X Content must be kept current and modified or removed when its state
@@ -72,7 +105,8 @@ posts can be edited; an old public embed is not sufficient release evidence.
 ## Release gate
 
 Do not wire `extractXEmbed` into Railway, a local test account, Preview, or
-production while the current raw-snippet path is present. Choose the
-persistence model, implement it across both repositories, run local and CI
-checks, then perform an approved development-only save/readback with a public
-test link. Production requires a separate review and deployment decision.
+production while the current raw-snippet path is present. The next external
+decision is whether to authorize X developer access and a bounded pay-per-use
+budget; the previously approved test environment does not itself authorize
+paid X services. Production requires a separate review and deployment
+decision.

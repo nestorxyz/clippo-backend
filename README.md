@@ -37,6 +37,7 @@ CONVEX_URL=https://replace-me.convex.cloud
 CONVEX_BACKEND_SECRET=replace-with-a-shared-random-secret
 GEMINI_API_KEY=replace_me
 FIRECRAWL_API_KEY=
+X_OEMBED_INGESTION_ENABLED=false
 ```
 
 `GOOGLE_AI_API_KEY` is accepted as a fallback for the social-media service, but
@@ -50,6 +51,14 @@ social sources, background refresh, or URLs with credential-shaped query
 parameters. The basic proxy avoids automatic enhanced-proxy credit charges.
 When Firecrawl is unavailable, the native extractor saves bounded page text.
 Either path stores at most 20,000 characters of content.
+
+`X_OEMBED_INGESTION_ENABLED` is an opt-in prototype switch, off by default.
+When enabled, an individual public X post may provide at most 500 characters
+of its own text during link saving. It does not extract quoted posts, threads,
+or media, does not call Firecrawl, and falls back to guarded metadata when the
+embed is missing or too brief. Keep the switch off outside an approved
+development test until X content edit/deletion and removal-request handling is
+designed and verified; a working embed response alone is not release approval.
 
 ## Commands
 
@@ -76,8 +85,9 @@ remains metadata-only. If YouTube blocks the server-side metadata process,
 DoryAI combines bounded oEmbed metadata with Gemini's direct public-YouTube
 video understanding to save a summary and transcript. If Gemini cannot analyze
 the video, the result is explicitly metadata-only. YouTube is never treated as
-a general webpage. LinkedIn and X remain specialized-extractor work and use
-explicitly degraded webpage metadata fallback. Arbitrary HTTP(S) URLs use the
+a general webpage. LinkedIn uses explicitly degraded webpage metadata fallback.
+X has an opt-in, bounded public-embed snippet prototype with the same guarded
+metadata fallback. Arbitrary HTTP(S) URLs use the
 general web-page boundary. That
 boundary pins each request and redirect to a validated public DNS address,
 accepts only standard HTTP(S) ports and HTML, and enforces timeout and

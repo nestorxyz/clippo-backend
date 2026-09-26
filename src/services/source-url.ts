@@ -24,6 +24,7 @@ export type ImplementedExtractionStrategy =
   | 'youtube-metadata'
   | 'youtube-gemini'
   | 'youtube-oembed'
+  | 'x-oembed'
   | 'firecrawl'
   | 'web-page'
   | 'url-only';
@@ -132,6 +133,15 @@ export const describeSourceExtraction = (
   usedStrategy: ImplementedExtractionStrategy,
 ): SourceExtractionResult => {
   const source = classifySourceUrl(input);
+  if (source.kind === 'x' && usedStrategy === 'x-oembed') {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: true,
+      limitation:
+        'Only public post text was available; quotes, threads, and media were not analyzed',
+    };
+  }
   if (source.kind === 'web-page' && usedStrategy === 'firecrawl') {
     return {
       kind: source.kind,

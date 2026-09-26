@@ -91,6 +91,16 @@ test('reports the extraction strategy that actually ran', () => {
     },
   );
   assert.deepEqual(
+    describeSourceExtraction('https://x.com/dory/status/123', 'x-oembed'),
+    {
+      kind: 'x',
+      usedStrategy: 'x-oembed',
+      degraded: true,
+      limitation:
+        'Only public post text was available; quotes, threads, and media were not analyzed',
+    },
+  );
+  assert.deepEqual(
     describeSourceExtraction('https://x.com/dory/status/123', 'web-page'),
     {
       kind: 'x',

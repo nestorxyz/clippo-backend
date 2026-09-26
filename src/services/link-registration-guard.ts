@@ -4,6 +4,7 @@ export interface LinkAnalysisState {
   analyzedUrl: string | null;
   error: string | null;
   registeredUrls: string[];
+  verifiedXContent: string | null;
 }
 
 export type ChatToolDirective =
@@ -22,6 +23,7 @@ export const emptyLinkAnalysisState = (): LinkAnalysisState => ({
   analyzedUrl: null,
   error: null,
   registeredUrls: [],
+  verifiedXContent: null,
 });
 
 export const recordLinkAnalysis = (
@@ -29,7 +31,12 @@ export const recordLinkAnalysis = (
   result: unknown,
   currentState: LinkAnalysisState = emptyLinkAnalysisState(),
 ): LinkAnalysisState => {
-  const analysis = result as { success?: unknown; error?: unknown } | null;
+  const analysis = result as {
+    success?: unknown;
+    error?: unknown;
+    content?: unknown;
+    sourceExtraction?: { usedStrategy?: unknown };
+  } | null;
   if (!analysis || analysis.success !== true) {
     return {
       analyzedUrl: null,
@@ -38,6 +45,7 @@ export const recordLinkAnalysis = (
           ? analysis.error
           : 'URL analysis failed',
       registeredUrls: currentState.registeredUrls,
+      verifiedXContent: null,
     };
   }
 
@@ -46,14 +54,43 @@ export const recordLinkAnalysis = (
       analyzedUrl: classifySourceUrl(String(url)).normalizedUrl,
       error: null,
       registeredUrls: currentState.registeredUrls,
+      verifiedXContent:
+        analysis.sourceExtraction?.usedStrategy === 'x-oembed' &&
+        typeof analysis.content === 'string'
+          ? analysis.content.slice(0, 500)
+          : null,
     };
   } catch {
     return {
       analyzedUrl: null,
       error: 'URL analysis returned an invalid URL',
       registeredUrls: currentState.registeredUrls,
+      verifiedXContent: null,
     };
   }
+};
+
+export const withVerifiedXContent = <T extends { url?: unknown; content?: unknown }>(
+  state: LinkAnalysisState,
+  args: T,
+): T => {
+  let source;
+  try {
+    source = classifySourceUrl(String(args.url));
+  } catch {
+    return args;
+  }
+  if (source.kind !== 'x') return args;
+
+  // A model may omit or invent content. Persist only the snippet obtained from
+  // the same successfully analyzed X URL.
+  const { content: _modelContent, ...withoutModelContent } = args;
+  return {
+    ...withoutModelContent,
+    ...(source.normalizedUrl === state.analyzedUrl && state.verifiedXContent
+      ? { content: state.verifiedXContent }
+      : {}),
+  } as T;
 };
 
 export const recordLinkRegistration = (

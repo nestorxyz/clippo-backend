@@ -11,6 +11,7 @@ import {
   recordLinkAnalysis,
   recordLinkRegistration,
   selectChatToolDirective,
+  withVerifiedXContent,
 } from './link-registration-guard';
 import { classifySourceUrl, describeSourceExtraction } from './source-url';
 import {
@@ -413,7 +414,7 @@ const tools: {
     {
       name: 'get_url_info',
       description:
-        'Analyzes URLs and provides metadata. Instagram Reels and TikTok can use media processing; YouTube long videos can use metadata plus labeled captions. LinkedIn and X use guarded public metadata or an explicit URL-only fallback. Regular webpages use bounded public-HTML extraction.',
+        'Analyzes URLs and provides metadata. Instagram Reels and TikTok can use media processing; YouTube long videos can use metadata plus labeled captions. X can use a bounded public-post snippet; LinkedIn and unavailable X posts use guarded metadata or an explicit URL-only fallback. Regular webpages use bounded public-HTML extraction.',
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -980,7 +981,10 @@ export class AIService {
                 fc.args?.url,
               );
               if (guard.allowed) {
-                functionResponse = await this.registerLink(userId, fc.args);
+                functionResponse = await this.registerLink(
+                  userId,
+                  withVerifiedXContent(linkAnalysis, fc.args ?? {}),
+                );
                 linkAnalysis = recordLinkRegistration(
                   linkAnalysis,
                   fc.args?.url,
@@ -1195,7 +1199,10 @@ Execute the two-step process to analyze and save this link with appropriate cate
                 fc.args?.url,
               );
               if (guard.allowed) {
-                functionResponse = await this.registerLink(userId, fc.args);
+                functionResponse = await this.registerLink(
+                  userId,
+                  withVerifiedXContent(linkAnalysis, fc.args ?? {}),
+                );
                 linkAnalysis = recordLinkRegistration(
                   linkAnalysis,
                   fc.args?.url,
@@ -1238,7 +1245,10 @@ Execute the two-step process to analyze and save this link with appropriate cate
           source: 'web',
           img_preview: urlInfo?.urlMetadata?.image || null,
         };
-        linkResult = await this.registerLink(userId, fallbackData);
+        linkResult = await this.registerLink(
+          userId,
+          withVerifiedXContent(linkAnalysis, fallbackData),
+        );
       }
 
       if (!linkResult) {
@@ -1453,6 +1463,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
           },
           platform: restricted.platform,
           contentAvailable: restricted.contentAvailable,
+          ...(restricted.content ? { content: restricted.content } : {}),
           extractionFailureCode: restricted.failureCode,
           sourceExtraction,
           limitations,

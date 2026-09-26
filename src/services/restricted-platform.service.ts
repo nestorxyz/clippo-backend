@@ -1,5 +1,6 @@
 import { extractWebPage, type WebPageExtraction } from './web-page-extractor';
 import { classifySourceUrl, type SourceKind } from './source-url';
+import { extractXEmbed, hasUsefulXContext, type XEmbedExtraction } from './x-embed.service';
 
 type RestrictedSourceKind = Extract<SourceKind, 'linkedin' | 'x'>;
 
@@ -10,14 +11,16 @@ export interface RestrictedPlatformExtraction {
   description: string;
   imageUrl: string | null;
   summary: string;
+  content: string | null;
   contentAvailable: boolean;
-  usedStrategy: 'web-page' | 'url-only';
+  usedStrategy: 'x-oembed' | 'web-page' | 'url-only';
   limitation: string;
   failureCode: string | null;
 }
 
 export interface RestrictedPlatformDependencies {
   extractPage?: (url: string) => Promise<WebPageExtraction>;
+  extractXPost?: (url: string) => Promise<XEmbedExtraction>;
 }
 
 const humanizeSlug = (value: string): string => {
@@ -60,6 +63,37 @@ export const extractRestrictedPlatform = async (
   }
 
   const platform = platformName(source.kind);
+  if (
+    source.kind === 'x' &&
+    (dependencies.extractXPost !== undefined ||
+      process.env.X_OEMBED_INGESTION_ENABLED === 'true')
+  ) {
+    try {
+      const post = await (dependencies.extractXPost ?? extractXEmbed)(
+        source.normalizedUrl,
+      );
+      if (hasUsefulXContext(post.snippet)) {
+        const author = post.handle ? `@${post.handle}` : post.authorName;
+        return {
+          kind: 'x',
+          platform,
+          title: `X post by ${author}: ${post.snippet.slice(0, 90)}`,
+          description: post.snippet,
+          imageUrl: null,
+          summary: post.snippet,
+          content: post.snippet,
+          contentAvailable: true,
+          usedStrategy: 'x-oembed',
+          limitation:
+            'Only the public post text was available; quotes, threads, and media were not analyzed',
+          failureCode: null,
+        };
+      }
+    } catch {
+      // The public embed can be unavailable; preserve the guarded page fallback.
+    }
+  }
+
   const extractPage = dependencies.extractPage ?? extractWebPage;
   try {
     const page = await extractPage(source.normalizedUrl);
@@ -70,6 +104,7 @@ export const extractRestrictedPlatform = async (
       description: page.description,
       imageUrl: page.imageUrl,
       summary: page.description || page.text.slice(0, 500),
+      content: null,
       contentAvailable: true,
       usedStrategy: 'web-page',
       limitation: `Specialized ${source.kind} extraction is not implemented`,
@@ -89,6 +124,7 @@ export const extractRestrictedPlatform = async (
       description: limitation,
       imageUrl: null,
       summary: limitation,
+      content: null,
       contentAvailable: false,
       usedStrategy: 'url-only',
       limitation,

@@ -7,6 +7,7 @@ import {
   recordLinkAnalysis,
   recordLinkRegistration,
   selectChatToolDirective,
+  withVerifiedXContent,
 } from './link-registration-guard';
 
 test('allows the same normalized URL after successful analysis', () => {
@@ -83,6 +84,49 @@ test('preserves completed registrations across later URL analysis', () => {
 
   assert.equal(guardLinkRegistration(state, 'https://example.com/two').allowed, true);
   assert.equal(guardLinkRegistration(state, 'https://example.com/one').allowed, false);
+});
+
+test('persists only verified X snippet for the analyzed URL', () => {
+  const snippet = 'Raise prices and advertise more to reach customers.';
+  const state = recordLinkAnalysis('https://x.com/dory/status/123', {
+    success: true,
+    content: snippet,
+    sourceExtraction: { usedStrategy: 'x-oembed' },
+  });
+
+  assert.deepEqual(
+    withVerifiedXContent(state, {
+      url: 'https://x.com/dory/status/123#reply',
+      content: 'Invented post details',
+      title: 'Business advice',
+    }),
+    {
+      url: 'https://x.com/dory/status/123#reply',
+      content: snippet,
+      title: 'Business advice',
+    },
+  );
+  assert.deepEqual(
+    withVerifiedXContent(state, {
+      url: 'https://x.com/dory/status/456',
+      content: 'Invented post details',
+    }),
+    { url: 'https://x.com/dory/status/456' },
+  );
+});
+
+test('does not persist model-invented X content after metadata-only analysis', () => {
+  const state = recordLinkAnalysis('https://x.com/dory/status/123', {
+    success: true,
+    sourceExtraction: { usedStrategy: 'url-only' },
+  });
+  assert.deepEqual(
+    withVerifiedXContent(state, {
+      url: 'https://x.com/dory/status/123',
+      content: 'Made up context',
+    }),
+    { url: 'https://x.com/dory/status/123' },
+  );
 });
 
 test('bounds chat tool rounds with a legible error', () => {

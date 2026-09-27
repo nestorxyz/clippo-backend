@@ -984,11 +984,14 @@ export class AIService {
               if (guard.allowed) {
                 functionResponse = await this.registerLink(
                   userId,
-                  withVerifiedXContent(linkAnalysis, fc.args ?? {}),
+                  withVerifiedXContent(linkAnalysis, {
+                    ...(fc.args ?? {}),
+                    url: guard.saveUrl,
+                  }),
                 );
                 linkAnalysis = recordLinkRegistration(
                   linkAnalysis,
-                  fc.args?.url,
+                  guard.saveUrl,
                   functionResponse,
                 );
               } else {
@@ -1202,11 +1205,14 @@ Execute the two-step process to analyze and save this link with appropriate cate
               if (guard.allowed) {
                 functionResponse = await this.registerLink(
                   userId,
-                  withVerifiedXContent(linkAnalysis, fc.args ?? {}),
+                  withVerifiedXContent(linkAnalysis, {
+                    ...(fc.args ?? {}),
+                    url: guard.saveUrl,
+                  }),
                 );
                 linkAnalysis = recordLinkRegistration(
                   linkAnalysis,
-                  fc.args?.url,
+                  guard.saveUrl,
                   functionResponse,
                 );
                 if (!linkResult?.success) linkResult = functionResponse;
@@ -1248,7 +1254,10 @@ Execute the two-step process to analyze and save this link with appropriate cate
         };
         linkResult = await this.registerLink(
           userId,
-          withVerifiedXContent(linkAnalysis, fallbackData),
+          withVerifiedXContent(linkAnalysis, {
+            ...fallbackData,
+            url: guard.saveUrl,
+          }),
         );
       }
 

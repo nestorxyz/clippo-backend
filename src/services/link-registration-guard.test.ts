@@ -17,7 +17,65 @@ test('allows the same normalized URL after successful analysis', () => {
 
   assert.deepEqual(guardLinkRegistration(state, 'https://example.com/page'), {
     allowed: true,
+    saveUrl: 'https://example.com/page',
   });
+});
+
+test('saves the analyzed YouTube URL when the model rewrites the same video', () => {
+  const analyzedUrl = 'https://youtu.be/IBcBKgYUghU?si=Vh3N_9Mvt5yPnW0i';
+  const state = recordLinkAnalysis(analyzedUrl, { success: true });
+
+  for (const registrationUrl of [
+    'https://youtu.be/IBcBKgYUghU',
+    'https://www.youtube.com/watch?v=IBcBKgYUghU',
+    'https://youtube.com/shorts/IBcBKgYUghU',
+  ]) {
+    assert.deepEqual(guardLinkRegistration(state, registrationUrl), {
+      allowed: true,
+      saveUrl: analyzedUrl,
+    });
+  }
+});
+
+test('rejects a different YouTube video and unrelated URL changes', () => {
+  const state = recordLinkAnalysis('https://youtu.be/IBcBKgYUghU?si=share', {
+    success: true,
+  });
+
+  for (const registrationUrl of [
+    'https://youtu.be/abcdefghijk',
+    'https://www.youtube.com/watch?v=abcdefghijk',
+    'https://example.com/watch?v=IBcBKgYUghU',
+    'https://youtube.com.evil/watch?v=IBcBKgYUghU',
+  ]) {
+    const result = guardLinkRegistration(state, registrationUrl);
+    assert.equal(result.allowed, false);
+    if (!result.allowed) assert.equal(result.response.error, 'URL_MISMATCH');
+  }
+
+  const webState = recordLinkAnalysis('https://example.com/article?part=1', {
+    success: true,
+  });
+  const changedPage = guardLinkRegistration(
+    webState,
+    'https://example.com/article?part=2',
+  );
+  assert.equal(changedPage.allowed, false);
+});
+
+test('blocks a second YouTube registration through an equivalent URL', () => {
+  const analyzedUrl = 'https://youtu.be/IBcBKgYUghU?si=share';
+  let state = recordLinkAnalysis(analyzedUrl, { success: true });
+  state = recordLinkRegistration(state, analyzedUrl, { success: true });
+
+  const result = guardLinkRegistration(
+    state,
+    'https://www.youtube.com/watch?v=IBcBKgYUghU',
+  );
+  assert.equal(result.allowed, false);
+  if (!result.allowed) {
+    assert.equal(result.response.error, 'LINK_ALREADY_REGISTERED');
+  }
 });
 
 test('blocks registration before URL analysis', () => {

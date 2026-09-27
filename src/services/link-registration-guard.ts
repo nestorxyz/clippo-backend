@@ -13,7 +13,7 @@ export type ChatToolDirective =
   | { mode: 'text' };
 
 type GuardResult =
-  | { allowed: true }
+  | { allowed: true; saveUrl: string }
   | {
       allowed: false;
       response: { success: false; error: string; message: string };
@@ -113,6 +113,44 @@ export const recordLinkRegistration = (
   }
 };
 
+const youtubeVideoId = (input: string): string | null => {
+  const source = classifySourceUrl(input);
+  if (source.kind !== 'youtube-video' && source.kind !== 'youtube-short') {
+    return null;
+  }
+
+  const url = new URL(source.normalizedUrl);
+  const parts = url.pathname.split('/').filter(Boolean);
+  let id: string | null = null;
+  if (url.hostname === 'youtu.be' && parts.length === 1) {
+    id = parts[0];
+  } else if (parts.length === 1 && parts[0] === 'watch') {
+    id = url.searchParams.get('v');
+  } else if (
+    parts.length === 2 &&
+    (parts[0] === 'shorts' || parts[0] === 'live')
+  ) {
+    id = parts[1];
+  }
+
+  return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+};
+
+const matchesAnalyzedUrl = (
+  analyzedUrl: string,
+  candidateUrl: string,
+): boolean => {
+  if (analyzedUrl === candidateUrl) return true;
+
+  // YouTube share links may change shape between model calls; only the video ID
+  // may match, and the caller still persists the URL that was actually analyzed.
+  const analyzedVideoId = youtubeVideoId(analyzedUrl);
+  return (
+    analyzedVideoId !== null &&
+    analyzedVideoId === youtubeVideoId(candidateUrl)
+  );
+};
+
 export const guardLinkRegistration = (
   state: LinkAnalysisState,
   registrationUrl: unknown,
@@ -154,7 +192,11 @@ export const guardLinkRegistration = (
     };
   }
 
-  if (state.registeredUrls.includes(normalizedRegistrationUrl)) {
+  if (
+    state.registeredUrls.some((registeredUrl) =>
+      matchesAnalyzedUrl(registeredUrl, normalizedRegistrationUrl),
+    )
+  ) {
     return {
       allowed: false,
       response: {
@@ -165,7 +207,7 @@ export const guardLinkRegistration = (
     };
   }
 
-  if (normalizedRegistrationUrl !== state.analyzedUrl) {
+  if (!matchesAnalyzedUrl(state.analyzedUrl, normalizedRegistrationUrl)) {
     return {
       allowed: false,
       response: {
@@ -175,7 +217,7 @@ export const guardLinkRegistration = (
       },
     };
   }
-  return { allowed: true };
+  return { allowed: true, saveUrl: state.analyzedUrl };
 };
 
 export const MAX_CHAT_TOOL_ROUNDS = 6;

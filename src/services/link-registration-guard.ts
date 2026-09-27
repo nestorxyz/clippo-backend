@@ -4,7 +4,13 @@ export interface LinkAnalysisState {
   analyzedUrl: string | null;
   error: string | null;
   registeredUrls: string[];
+  verifiedXContent: string | null;
 }
+
+export type ChatToolDirective =
+  | { mode: 'auto' }
+  | { mode: 'tool'; name: 'get_url_info' | 'register_link' | 'get_links' }
+  | { mode: 'text' };
 
 type GuardResult =
   | { allowed: true }
@@ -17,6 +23,7 @@ export const emptyLinkAnalysisState = (): LinkAnalysisState => ({
   analyzedUrl: null,
   error: null,
   registeredUrls: [],
+  verifiedXContent: null,
 });
 
 export const recordLinkAnalysis = (
@@ -24,7 +31,12 @@ export const recordLinkAnalysis = (
   result: unknown,
   currentState: LinkAnalysisState = emptyLinkAnalysisState(),
 ): LinkAnalysisState => {
-  const analysis = result as { success?: unknown; error?: unknown } | null;
+  const analysis = result as {
+    success?: unknown;
+    error?: unknown;
+    content?: unknown;
+    sourceExtraction?: { usedStrategy?: unknown };
+  } | null;
   if (!analysis || analysis.success !== true) {
     return {
       analyzedUrl: null,
@@ -33,6 +45,7 @@ export const recordLinkAnalysis = (
           ? analysis.error
           : 'URL analysis failed',
       registeredUrls: currentState.registeredUrls,
+      verifiedXContent: null,
     };
   }
 
@@ -41,14 +54,43 @@ export const recordLinkAnalysis = (
       analyzedUrl: classifySourceUrl(String(url)).normalizedUrl,
       error: null,
       registeredUrls: currentState.registeredUrls,
+      verifiedXContent:
+        analysis.sourceExtraction?.usedStrategy === 'x-oembed' &&
+        typeof analysis.content === 'string'
+          ? analysis.content.slice(0, 500)
+          : null,
     };
   } catch {
     return {
       analyzedUrl: null,
       error: 'URL analysis returned an invalid URL',
       registeredUrls: currentState.registeredUrls,
+      verifiedXContent: null,
     };
   }
+};
+
+export const withVerifiedXContent = <T extends { url?: unknown; content?: unknown }>(
+  state: LinkAnalysisState,
+  args: T,
+): T => {
+  let source;
+  try {
+    source = classifySourceUrl(String(args.url));
+  } catch {
+    return args;
+  }
+  if (source.kind !== 'x') return args;
+
+  // A model may omit or invent content. Persist only the snippet obtained from
+  // the same successfully analyzed X URL.
+  const { content: _modelContent, ...withoutModelContent } = args;
+  return {
+    ...withoutModelContent,
+    ...(source.normalizedUrl === state.analyzedUrl && state.verifiedXContent
+      ? { content: state.verifiedXContent }
+      : {}),
+  } as T;
 };
 
 export const recordLinkRegistration = (
@@ -148,4 +190,41 @@ export const nextChatToolRound = (
     );
   }
   return completedRounds + 1;
+};
+
+const containsHttpUrl = (message: string): boolean =>
+  /(?:^|\s)https?:\/\/\S+/i.test(message);
+
+const refersToSavedLinks = (message: string): boolean =>
+  /\b(?:saved|bookmarked|my links|my bookmarks|guarde|guardad[oa]s?|mis enlaces|mis links)\b/i.test(
+    message.normalize('NFD').replace(/\p{M}/gu, ''),
+  );
+
+export const selectChatToolDirective = (args: {
+  message: string;
+  linkAnalysis: LinkAnalysisState;
+  registrationAttempted: boolean;
+  retrievalCompleted: boolean;
+}): ChatToolDirective => {
+  if (
+    args.registrationAttempted ||
+    args.retrievalCompleted ||
+    args.linkAnalysis.error
+  ) {
+    return { mode: 'text' };
+  }
+
+  if (args.linkAnalysis.analyzedUrl) {
+    return { mode: 'tool', name: 'register_link' };
+  }
+
+  if (containsHttpUrl(args.message)) {
+    return { mode: 'tool', name: 'get_url_info' };
+  }
+
+  if (refersToSavedLinks(args.message)) {
+    return { mode: 'tool', name: 'get_links' };
+  }
+
+  return { mode: 'auto' };
 };

@@ -36,11 +36,28 @@ FRONTEND_URL=http://localhost:3000
 CONVEX_URL=https://replace-me.convex.cloud
 CONVEX_BACKEND_SECRET=replace-with-a-shared-random-secret
 GEMINI_API_KEY=replace_me
+FIRECRAWL_API_KEY=
 ```
 
 `GOOGLE_AI_API_KEY` is accepted as a fallback for the social-media service, but
 `GEMINI_API_KEY` is the canonical variable. The process fails fast without the
 required Gemini or Convex configuration.
+
+`FIRECRAWL_API_KEY` is optional and server-only. When set, DoryAI uses
+Firecrawl once while saving a general public webpage, after the guarded native
+fetch has checked its target. It does not call Firecrawl for chat retrieval,
+social sources, background refresh, or URLs with credential-shaped query
+parameters. The basic proxy avoids automatic enhanced-proxy credit charges.
+When Firecrawl is unavailable, the native extractor saves bounded page text.
+Either path stores at most 20,000 characters of content.
+
+The local X save path can read a bounded public-post text snapshot from X's
+oEmbed response when `X_SNAPSHOT_INGESTION_ENABLED=true` is set server-side;
+otherwise it keeps the guarded metadata fallback. It uses no paid X API. The
+flag is off by default, and this code has not been deployed or verified with a
+saved Convex record. The chat flow can also store copies of the text, and there
+is no edit/deletion refresh. See the [X ingestion boundary](docs/X-INGESTION.md)
+before any rollout; X's current content policy is a release risk.
 
 ## Commands
 
@@ -59,20 +76,27 @@ strict TypeScript compilation.
 
 `src/services/source-url.ts` classifies DoryAI roadmap sources without fetching
 them. Instagram Reels and TikTok videos currently use the specialized short
-video processor. YouTube long videos use bounded, cookie-free yt-dlp metadata
-plus manual captions when available, falling back to explicitly labeled
-automatic captions or metadata-only results. YouTube Shorts, LinkedIn, and X
-remain specialized-extractor work and use explicitly degraded webpage metadata
-fallback. Arbitrary HTTP(S) URLs use the general web-page boundary. That
+video processor. YouTube videos and Shorts use bounded, cookie-free yt-dlp
+metadata plus manual captions when available, falling back to explicitly
+labeled automatic captions. When a Short has no captions, DoryAI reuses the
+existing bounded short-video audio transcription path; a failed audio fallback
+remains metadata-only. If YouTube blocks the server-side metadata process,
+DoryAI combines bounded oEmbed metadata with Gemini's direct public-YouTube
+video understanding to save a summary and transcript. If Gemini cannot analyze
+the video, the result is explicitly metadata-only. YouTube is never treated as
+a general webpage. LinkedIn uses explicitly degraded webpage metadata fallback.
+X has a bounded public-embed adapter behind a disabled-by-default server flag,
+with guarded metadata fallback when it is off or the embed yields no text.
+Arbitrary HTTP(S) URLs use the general web-page boundary. That
 boundary pins each request and redirect to a validated public DNS address,
 accepts only standard HTTP(S) ports and HTML, and enforces timeout and
 response-size limits. The same guarded transport protects caption and remote
 thumbnail downloads.
 
-General webpages currently return deterministic page metadata and a short
-local excerpt. Full page text is not sent to Gemini; focused AI summarization
-remains an explicit product/privacy decision. Fixture and read-only extraction
-proof is not a live save/readback.
+General webpages save deterministic page metadata plus bounded page text.
+Firecrawl main-content markdown is preferred during the save when configured;
+the native text is the fallback, not a clean article extraction. A successful
+fixture or read-only extraction check is not a live save/readback.
 
 ## Security and publication
 

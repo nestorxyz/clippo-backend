@@ -23,7 +23,13 @@ private user content in the report.
   use the guarded transport and bounded response size; full video download is
   outside the long-video metadata path. Public caption text is returned through
   the existing Gemini tool conversation and can be stored with the link in
-  Convex; no caption file is uploaded to Gemini.
+  Convex; no caption file is uploaded to Gemini. If YouTube blocks yt-dlp,
+  fallback metadata comes from its bounded public oEmbed endpoint rather than
+  fetching the full watch or Shorts webpage.
+- `FIRECRAWL_API_KEY` is server-only. Firecrawl is optional and may receive the
+  URL and public page content only after the native transport validates the
+  target as public; private, local, malformed, and nonstandard-port targets are
+  never delegated. Returned main-content markdown is capped at 20,000 characters.
 - Temporary media and provider uploads must be removed on success and failure.
 - Logs must not contain tokens, full private link libraries, transcripts, or
   production request bodies.

@@ -1,6 +1,9 @@
 import { YtDlp } from 'ytdlp-nodejs';
 import { spawn } from 'node:child_process';
-import { fetchPublicResource } from './public-resource';
+import {
+  fetchPublicResource,
+  type PublicResourceDependencies,
+} from './public-resource';
 import { classifySourceUrl } from './source-url';
 
 const CAPTION_MAX_BYTES = 2_000_000;
@@ -8,6 +11,9 @@ const CAPTION_MAX_CHARS = 100_000;
 const CAPTION_TIMEOUT_MS = 10_000;
 const METADATA_MAX_BYTES = 5_000_000;
 const METADATA_TIMEOUT_MS = 30_000;
+const OEMBED_MAX_BYTES = 100_000;
+const OEMBED_TIMEOUT_MS = 8_000;
+const GEMINI_CONTENT_MAX_CHARS = 100_000;
 
 interface CaptionTrack {
   ext: string;
@@ -41,6 +47,39 @@ export interface YouTubeExtraction {
   transcriptSource: 'manual' | 'automatic' | 'none';
   transcriptTruncated: boolean;
   limitations: string[];
+}
+
+export interface YouTubeOEmbedExtraction {
+  title: string;
+  channel: string | null;
+  thumbnailUrl: string | null;
+}
+
+interface GeminiTextOutput {
+  type: string;
+  text?: string;
+}
+
+interface GeminiYouTubeInteraction {
+  status: string;
+  output_text?: string;
+  outputs?: GeminiTextOutput[];
+}
+
+export interface YouTubeGeminiDependencies {
+  createInteraction: (params: {
+    model: string;
+    input: Array<
+      | { type: 'text'; text: string }
+      | { type: 'video'; uri: string }
+    >;
+    generation_config: {
+      max_output_tokens: number;
+      temperature: number;
+    };
+    store: false;
+  }) => Promise<GeminiYouTubeInteraction>;
+  model?: string;
 }
 
 export interface YouTubeDependencies {
@@ -311,13 +350,110 @@ const safeThumbnail = (value: unknown): string | null => {
   }
 };
 
+export const extractYouTubeOEmbed = async (
+  input: string,
+  dependencies: PublicResourceDependencies = {},
+): Promise<YouTubeOEmbedExtraction> => {
+  const source = classifySourceUrl(input);
+  if (source.kind !== 'youtube-video' && source.kind !== 'youtube-short') {
+    throw new Error('URL must identify a YouTube video or Short');
+  }
+
+  const endpoint = new URL('https://www.youtube.com/oembed');
+  endpoint.searchParams.set('url', source.normalizedUrl);
+  endpoint.searchParams.set('format', 'json');
+  const resource = await fetchPublicResource(
+    endpoint.toString(),
+    {
+      accept: 'application/json',
+      maxBytes: OEMBED_MAX_BYTES,
+      maxRedirects: 2,
+      timeoutMs: OEMBED_TIMEOUT_MS,
+    },
+    dependencies,
+  );
+  const payload = JSON.parse(resource.body.toString('utf8')) as {
+    type?: unknown;
+    title?: unknown;
+    author_name?: unknown;
+    thumbnail_url?: unknown;
+  };
+  if (payload.type !== 'video' || typeof payload.title !== 'string') {
+    throw new Error('YouTube oEmbed response was invalid');
+  }
+
+  return {
+    title: payload.title.trim() || 'Untitled YouTube video',
+    channel:
+      typeof payload.author_name === 'string'
+        ? payload.author_name.trim() || null
+        : null,
+    thumbnailUrl: safeThumbnail(payload.thumbnail_url),
+  };
+};
+
+export const extractYouTubeWithGemini = async (
+  input: string,
+  dependencies: YouTubeGeminiDependencies,
+): Promise<{ content: string; truncated: boolean }> => {
+  const source = classifySourceUrl(input);
+  if (source.kind !== 'youtube-video' && source.kind !== 'youtube-short') {
+    throw new Error('URL must identify a YouTube video or Short');
+  }
+
+  const interaction = await dependencies.createInteraction({
+    model: dependencies.model ?? 'gemini-3.8-flash',
+    input: [
+      {
+        type: 'text',
+        text: [
+          'Create a faithful content record for this video so it can be searched and answered about later.',
+          'Include a concise summary, the complete spoken transcript in the original language, meaningful on-screen text, and only important non-verbal context.',
+          'Do not infer speech or details that are not present. Clearly label summary, transcript, on-screen text, and visual context.',
+        ].join(' '),
+      },
+      {
+        type: 'video',
+        uri: source.normalizedUrl,
+      },
+    ],
+    generation_config: {
+      max_output_tokens: 16_384,
+      temperature: 0,
+    },
+    store: false,
+  });
+
+  if (interaction.status !== 'completed') {
+    throw new Error('Gemini YouTube analysis did not complete');
+  }
+
+  const content =
+    interaction.output_text?.trim() ||
+    (interaction.outputs ?? [])
+      .filter(
+        (output) => output.type === 'text' && typeof output.text === 'string',
+      )
+      .map((output) => output.text?.trim() ?? '')
+      .filter(Boolean)
+      .join('\n\n');
+  if (!content) {
+    throw new Error('Gemini YouTube analysis returned no content');
+  }
+
+  return {
+    content: content.slice(0, GEMINI_CONTENT_MAX_CHARS),
+    truncated: content.length > GEMINI_CONTENT_MAX_CHARS,
+  };
+};
+
 export const extractYouTubeVideo = async (
   input: string,
   dependencies: YouTubeDependencies = {},
 ): Promise<YouTubeExtraction> => {
   const source = classifySourceUrl(input);
-  if (source.kind !== 'youtube-video') {
-    throw new Error('URL must identify a YouTube long video');
+  if (source.kind !== 'youtube-video' && source.kind !== 'youtube-short') {
+    throw new Error('URL must identify a YouTube video or Short');
   }
 
   const getInfo = dependencies.getInfo ?? getDefaultInfo;

@@ -29,6 +29,9 @@ test('returns honest URL-only metadata when X blocks extraction', async () => {
   const result = await extractRestrictedPlatform(
     'https://x.com/dory/status/123',
     {
+      extractXPost: async () => {
+        throw new Error('embed unavailable');
+      },
       extractPage: async () => {
         throw new PublicResourceError('HTTP_ERROR', 'Resource returned HTTP 403');
       },
@@ -40,6 +43,90 @@ test('returns honest URL-only metadata when X blocks extraction', async () => {
   assert.equal(result.contentAvailable, false);
   assert.equal(result.failureCode, 'HTTP_ERROR');
   assert.match(result.summary, /URL-only metadata/);
+});
+
+test('does not activate raw X snippet storage from an environment switch', async () => {
+  const previous = process.env.X_OEMBED_INGESTION_ENABLED;
+  process.env.X_OEMBED_INGESTION_ENABLED = 'true';
+  try {
+    const result = await extractRestrictedPlatform(
+      'https://x.com/dory/status/123',
+      {
+        extractPage: async () => {
+          throw new PublicResourceError('HTTP_ERROR', 'Resource returned HTTP 403');
+        },
+      },
+    );
+    assert.equal(result.usedStrategy, 'url-only');
+  } finally {
+    if (previous === undefined) {
+      delete process.env.X_OEMBED_INGESTION_ENABLED;
+    } else {
+      process.env.X_OEMBED_INGESTION_ENABLED = previous;
+    }
+  }
+});
+
+test('uses a useful X embed snippet without claiming quoted or media content', async () => {
+  const result = await extractRestrictedPlatform(
+    'https://x.com/dory/status/123',
+    {
+      extractXPost: async () => ({
+        authorName: 'Dory AI',
+        handle: 'dory',
+        snippet: 'Raise prices and advertise more to reach customers.',
+      }),
+      extractPage: async () => {
+        throw new Error('native page should not be fetched');
+      },
+    },
+  );
+
+  assert.equal(result.usedStrategy, 'x-oembed');
+  assert.equal(result.contentAvailable, true);
+  assert.equal(result.content, 'Raise prices and advertise more to reach customers.');
+  assert.match(result.title, /@dory/);
+  assert.match(result.limitation, /media were not analyzed/);
+});
+
+test('saves short X post text as returned by the embed', async () => {
+  const result = await extractRestrictedPlatform(
+    'https://x.com/dory/status/123',
+    {
+      extractXPost: async () => ({
+        authorName: 'Dory AI',
+        handle: 'dory',
+        snippet: 'Yes https://t.co/example',
+      }),
+      extractPage: async () => {
+        throw new PublicResourceError('HTTP_ERROR', 'Resource returned HTTP 403');
+      },
+    },
+  );
+
+  assert.equal(result.usedStrategy, 'x-oembed');
+  assert.equal(result.contentAvailable, true);
+  assert.equal(result.content, 'Yes https://t.co/example');
+});
+
+test('falls back when the X embed contains no post text', async () => {
+  const result = await extractRestrictedPlatform(
+    'https://x.com/dory/status/123',
+    {
+      extractXPost: async () => ({
+        authorName: 'Dory AI',
+        handle: 'dory',
+        snippet: '',
+      }),
+      extractPage: async () => {
+        throw new PublicResourceError('HTTP_ERROR', 'Resource returned HTTP 403');
+      },
+    },
+  );
+
+  assert.equal(result.usedStrategy, 'url-only');
+  assert.equal(result.contentAvailable, false);
+  assert.equal(result.content, null);
 });
 
 test('uses a conservative LinkedIn title without inventing post content', async () => {

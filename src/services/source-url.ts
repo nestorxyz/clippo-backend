@@ -22,6 +22,10 @@ export interface ClassifiedSourceUrl {
 export type ImplementedExtractionStrategy =
   | 'short-video'
   | 'youtube-metadata'
+  | 'youtube-gemini'
+  | 'youtube-oembed'
+  | 'x-oembed'
+  | 'firecrawl'
   | 'web-page'
   | 'url-only';
 
@@ -85,7 +89,7 @@ export const classifySourceUrl = (input: string): ClassifiedSourceUrl => {
     return {
       kind: 'youtube-short',
       normalizedUrl: url.toString(),
-      extractionStrategy: 'planned',
+      extractionStrategy: 'youtube-metadata',
     };
   }
 
@@ -129,6 +133,56 @@ export const describeSourceExtraction = (
   usedStrategy: ImplementedExtractionStrategy,
 ): SourceExtractionResult => {
   const source = classifySourceUrl(input);
+  if (source.kind === 'x' && usedStrategy === 'x-oembed') {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: true,
+      limitation:
+        'This is a snapshot of public post text at save time; quotes, threads, and media were not analyzed',
+    };
+  }
+  if (source.kind === 'web-page' && usedStrategy === 'firecrawl') {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: false,
+      limitation: null,
+    };
+  }
+  if (source.kind === 'youtube-short' && usedStrategy === 'short-video') {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: true,
+      limitation:
+        'YouTube captions were unavailable; audio transcription fallback was used',
+    };
+  }
+  if (
+    (source.kind === 'youtube-video' || source.kind === 'youtube-short') &&
+    usedStrategy === 'youtube-gemini'
+  ) {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: true,
+      limitation:
+        'YouTube blocked direct caption extraction; Gemini video understanding was used',
+    };
+  }
+  if (
+    (source.kind === 'youtube-video' || source.kind === 'youtube-short') &&
+    usedStrategy === 'youtube-oembed'
+  ) {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: true,
+      limitation:
+        'Full YouTube metadata and captions were unavailable; oEmbed metadata was used',
+    };
+  }
   if (source.extractionStrategy === usedStrategy) {
     return {
       kind: source.kind,

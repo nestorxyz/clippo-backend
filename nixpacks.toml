@@ -2,7 +2,7 @@
 nixPkgs = ["nodejs_22", "python3", "python3Packages.pip", "ffmpeg", "python3Packages.yt-dlp"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm ci --include=dev"]
 
 [phases.build]
 cmds = [

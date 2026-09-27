@@ -89,7 +89,7 @@ test('uses a useful X embed snippet without claiming quoted or media content', a
   assert.match(result.limitation, /media were not analyzed/);
 });
 
-test('falls back when X embed text is too brief to identify a topic', async () => {
+test('saves short X post text as returned by the embed', async () => {
   const result = await extractRestrictedPlatform(
     'https://x.com/dory/status/123',
     {
@@ -97,6 +97,26 @@ test('falls back when X embed text is too brief to identify a topic', async () =
         authorName: 'Dory AI',
         handle: 'dory',
         snippet: 'Yes https://t.co/example',
+      }),
+      extractPage: async () => {
+        throw new PublicResourceError('HTTP_ERROR', 'Resource returned HTTP 403');
+      },
+    },
+  );
+
+  assert.equal(result.usedStrategy, 'x-oembed');
+  assert.equal(result.contentAvailable, true);
+  assert.equal(result.content, 'Yes https://t.co/example');
+});
+
+test('falls back when the X embed contains no post text', async () => {
+  const result = await extractRestrictedPlatform(
+    'https://x.com/dory/status/123',
+    {
+      extractXPost: async () => ({
+        authorName: 'Dory AI',
+        handle: 'dory',
+        snippet: '',
       }),
       extractPage: async () => {
         throw new PublicResourceError('HTTP_ERROR', 'Resource returned HTTP 403');

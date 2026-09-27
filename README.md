@@ -51,12 +51,13 @@ parameters. The basic proxy avoids automatic enhanced-proxy credit charges.
 When Firecrawl is unavailable, the native extractor saves bounded page text.
 Either path stores at most 20,000 characters of content.
 
-The bounded X oEmbed adapter is a testable prototype, but it is **not wired into
-runtime configuration**. An environment variable cannot activate raw X snippet
-storage. The chat flow also stores analysis and registration messages, so the
-content lifecycle is not yet controlled. See the
-[X ingestion boundary](docs/X-INGESTION.md) before any development test or
-rollout. A working embed response alone is not release approval.
+The local X save path can read a bounded public-post text snapshot from X's
+oEmbed response when `X_SNAPSHOT_INGESTION_ENABLED=true` is set server-side;
+otherwise it keeps the guarded metadata fallback. It uses no paid X API. The
+flag is off by default, and this code has not been deployed or verified with a
+saved Convex record. The chat flow can also store copies of the text, and there
+is no edit/deletion refresh. See the [X ingestion boundary](docs/X-INGESTION.md)
+before any rollout; X's current content policy is a release risk.
 
 ## Commands
 
@@ -84,9 +85,9 @@ DoryAI combines bounded oEmbed metadata with Gemini's direct public-YouTube
 video understanding to save a summary and transcript. If Gemini cannot analyze
 the video, the result is explicitly metadata-only. YouTube is never treated as
 a general webpage. LinkedIn uses explicitly degraded webpage metadata fallback.
-X has a bounded public-embed adapter under test, but runtime still uses its
-guarded metadata fallback. Arbitrary HTTP(S) URLs use the general web-page
-boundary. That
+X has a bounded public-embed adapter behind a disabled-by-default server flag,
+with guarded metadata fallback when it is off or the embed yields no text.
+Arbitrary HTTP(S) URLs use the general web-page boundary. That
 boundary pins each request and redirect to a validated public DNS address,
 accepts only standard HTTP(S) ports and HTML, and enforces timeout and
 response-size limits. The same guarded transport protects caption and remote

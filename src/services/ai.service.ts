@@ -20,6 +20,7 @@ import {
   extractYouTubeVideo,
 } from './youtube.service';
 import { extractRestrictedPlatform } from './restricted-platform.service';
+import { extractXEmbed } from './x-embed.service';
 import {
   coerceLinkRetrievalFilters,
   presentRetrievedLinks,
@@ -1445,7 +1446,13 @@ Execute the two-step process to analyze and save this link with appropriate cate
         classifiedSource.kind === 'linkedin' ||
         classifiedSource.kind === 'x'
       ) {
-        const restricted = await extractRestrictedPlatform(url);
+        const restricted = await extractRestrictedPlatform(
+          url,
+          classifiedSource.kind === 'x' &&
+            process.env.X_SNAPSHOT_INGESTION_ENABLED === 'true'
+            ? { extractXPost: extractXEmbed }
+            : {},
+        );
         const sourceExtraction = describeSourceExtraction(
           url,
           restricted.usedStrategy,

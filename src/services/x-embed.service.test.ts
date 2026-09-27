@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { extractXEmbed, hasUsefulXContext } from './x-embed.service';
+import { extractXEmbed } from './x-embed.service';
 import type { PublicResourceDependencies } from './public-resource';
 
 const response = (
@@ -39,13 +39,6 @@ test('extracts only the public post paragraph from bounded X embed JSON', async 
     handle: 'dory',
     snippet: 'Useful advice & context for saving links.',
   });
-  assert.equal(hasUsefulXContext(result.snippet), true);
-});
-
-test('does not treat a short caption plus link as useful post context', () => {
-  assert.equal(hasUsefulXContext('Yes https://t.co/example'), false);
-  assert.equal(hasUsefulXContext('Grok'), false);
-  assert.equal(hasUsefulXContext('Raise prices and advertise more'), true);
 });
 
 test('rejects non-post URLs and mismatched embed responses', async () => {

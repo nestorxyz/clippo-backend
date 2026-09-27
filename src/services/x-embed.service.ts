@@ -56,12 +56,6 @@ const canonicalPost = (input: string): { url: string; handle: string | null; id:
   };
 };
 
-export const hasUsefulXContext = (snippet: string): boolean => {
-  const withoutUrls = snippet.replace(/https?:\/\/\S+/gi, ' ');
-  const words = withoutUrls.match(/[\p{L}\p{N}]+/gu) ?? [];
-  return words.length >= 4 && withoutUrls.replace(/[^\p{L}\p{N}]/gu, '').length >= 20;
-};
-
 export const extractXEmbed = async (
   input: string,
   dependencies: PublicResourceDependencies = {},

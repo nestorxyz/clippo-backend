@@ -139,7 +139,7 @@ export const describeSourceExtraction = (
       usedStrategy,
       degraded: true,
       limitation:
-        'Only public post text was available; quotes, threads, and media were not analyzed',
+        'This is a snapshot of public post text at save time; quotes, threads, and media were not analyzed',
     };
   }
   if (source.kind === 'web-page' && usedStrategy === 'firecrawl') {

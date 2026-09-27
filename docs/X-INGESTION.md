@@ -1,9 +1,12 @@
 # X link ingestion: storage and release boundary
 
-Status: verbatim-snippet direction selected by the owner on 2026-09-26;
-implementation remains gated. The oEmbed adapter can be exercised only through
-an injected test dependency; runtime activation was removed. Its passing tests
-and public responses do not prove a safe persisted-content lifecycle.
+Status on 2026-09-27: the owner selected a save-time text snapshot with no X
+API and no edit/deletion monitoring. The local backend now wires the oEmbed
+adapter into URL analysis behind `X_SNAPSHOT_INGESTION_ENABLED=true`, which is
+off by default. It passed local tests/build but has not been deployed
+or verified against a saved Convex record. This product choice conflicts with
+the current X Content compliance requirement described below; the code is not
+release approval.
 
 ## Product target
 
@@ -15,9 +18,9 @@ effect until the owner explicitly changes it.
 
 ## Current data path
 
-1. `extractXEmbed` can read a bounded public oEmbed response and extract the
-   post's own text. If wired into runtime, `getUrlInfo` would return that text
-   as `summary`, `description`, and `content`.
+1. `extractXEmbed` reads a bounded public oEmbed response and extracts the
+   post's own text. With the server flag enabled, `getUrlInfo` returns that
+   text as `summary`, `description`, and `content` when the embed succeeds.
 2. The chat orchestrator sends that response to Gemini and stores both the
    `get_url_info` result and the model's `register_link` arguments in Convex
    `chatMessages`. It also stores the registration result and final reply.
@@ -48,7 +51,7 @@ every derived field or message.
   product Privacy notice before release. This is risk reduction, not a legal
   determination that the labels are exempt from content rules.
 
-## Selected direction B: retain a verbatim snippet
+## Previously proposed lifecycle for verbatim retention (not selected)
 
 - Record post ID, source, last verification time, and every destination that
   may contain post-derived text. Update or remove title, description, content,
@@ -69,7 +72,7 @@ every derived field or message.
   official API requires approved access and prepaid credits. The owner's prior
   no-paid-X instruction does not authorize that purchase or ongoing spend.
 
-### Implementation order after provider/cost approval
+### Implementation order if this lifecycle is reconsidered
 
 1. Add source provenance to a link: original post ID, current version ID,
    author, last verified time, and availability. Keep one canonical verbatim
@@ -104,9 +107,10 @@ posts can be edited; an old public embed is not sufficient release evidence.
 
 ## Release gate
 
-Do not wire `extractXEmbed` into Railway, a local test account, Preview, or
-production while the current raw-snippet path is present. The next external
-decision is whether to authorize X developer access and a bounded pay-per-use
-budget; the previously approved test environment does not itself authorize
-paid X services. Production requires a separate review and deployment
-decision.
+The local code is wired behind an off-by-default flag, and no DoryAI
+environment has been deployed. Do not
+roll it out as policy-compliant: a permanent save-time snapshot does not update
+or remove X Content when the source changes, and the chat path creates further
+copies. The owner explicitly does not want an X API or lifecycle flow. A
+production deployment still needs a separate review and decision with that
+documented risk; local tests do not prove a saved record or grounded answer.

@@ -51,13 +51,15 @@ parameters. The basic proxy avoids automatic enhanced-proxy credit charges.
 When Firecrawl is unavailable, the native extractor saves bounded page text.
 Either path stores at most 20,000 characters of content.
 
-The local X save path can read a bounded public-post text snapshot from X's
+The X save path can read a bounded public-post text snapshot from X's
 oEmbed response when `X_SNAPSHOT_INGESTION_ENABLED=true` is set server-side;
 otherwise it keeps the guarded metadata fallback. It uses no paid X API. The
-flag is off by default, and this code has not been deployed or verified with a
-saved Convex record. The chat flow can also store copies of the text, and there
-is no edit/deletion refresh. See the [X ingestion boundary](docs/X-INGESTION.md)
-before any rollout; X's current content policy is a release risk.
+flag is off by default in code. On 2026-09-27 it was enabled in Railway
+development and production; a development save, Convex record readback, and
+grounded chat retrieval passed. Authenticated production save/readback remains
+unverified. The chat flow can also store copies of the text, and there is no
+edit/deletion refresh. See the [X ingestion boundary](docs/X-INGESTION.md):
+the current X content policy remains an unresolved release risk.
 
 ## Commands
 

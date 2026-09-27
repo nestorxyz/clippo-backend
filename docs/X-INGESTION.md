@@ -1,12 +1,14 @@
 # X link ingestion: storage and release boundary
 
 Status on 2026-09-27: the owner selected a save-time text snapshot with no X
-API and no edit/deletion monitoring. The local backend now wires the oEmbed
-adapter into URL analysis behind `X_SNAPSHOT_INGESTION_ENABLED=true`, which is
-off by default. It passed local tests/build but has not been deployed
-or verified against a saved Convex record. This product choice conflicts with
-the current X Content compliance requirement described below; the code is not
-release approval.
+API and no edit/deletion monitoring, and explicitly approved production
+activation after review of the provider-policy risk. The backend wires the
+oEmbed adapter into URL analysis behind `X_SNAPSHOT_INGESTION_ENABLED=true`,
+which remains off by default in code. Railway development and production now
+have the flag enabled. A development save, exact Convex record readback, and
+grounded chat retrieval passed; production authenticated save/readback has not
+yet been verified. This product choice conflicts with the current X Content
+compliance requirement described below. Deployment is not a compliance claim.
 
 ## Product target
 
@@ -105,12 +107,20 @@ changes. Its display rules also distinguish X for Websites from other methods.
 The [Edit Post help page](https://help.x.com/en/using-x/edit-post) confirms
 posts can be edited; an old public embed is not sufficient release evidence.
 
-## Release gate
+## Release evidence and unresolved risk
 
-The local code is wired behind an off-by-default flag, and no DoryAI
-environment has been deployed. Do not
-roll it out as policy-compliant: a permanent save-time snapshot does not update
-or remove X Content when the source changes, and the chat path creates further
-copies. The owner explicitly does not want an X API or lifecycle flow. A
-production deployment still needs a separate review and decision with that
-documented risk; local tests do not prove a saved record or grounded answer.
+- Backend release `2878376` passed 71 tests, TypeScript build, GitHub CI
+  `36348119645`, and the production dependency audit. Railway production
+  deployment `4f129497-8400-4695-ab86-8e082c59db2a` is successful with
+  `X_SNAPSHOT_INGESTION_ENABLED=true`; `/health` reports `ok` and `production`.
+- In development, saving public post
+  `https://x.com/SPACEdotcom/status/2036791665219056075` created one Convex
+  link record with 110 characters of post text. A subsequent saved-link query
+  retrieved and quoted that text. This tests one public text post, not all X
+  post shapes or production authentication.
+- The production dashboard redirects to Google sign-in. Authenticated
+  production save/readback awaits owner sign-in and is not claimed here.
+- A permanent snapshot does not update or remove X Content when its source
+  changes, and chat creates further copies. This conflicts with the current
+  X Developer Policy. The owner declined an X API and lifecycle flow and
+  approved the release despite that risk. No compliance claim is made.

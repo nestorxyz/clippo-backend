@@ -86,7 +86,10 @@ remains metadata-only. If YouTube blocks the server-side metadata process,
 DoryAI combines bounded oEmbed metadata with Gemini's direct public-YouTube
 video understanding to save a summary and transcript. If Gemini cannot analyze
 the video, the result is explicitly metadata-only. YouTube is never treated as
-a general webpage. LinkedIn uses explicitly degraded webpage metadata fallback.
+a general webpage. Public LinkedIn posts use bounded preview text when it is
+available without sign-in. This is saved as a partial preview, not a full post;
+if no usable post text is available, the result is metadata-only. LinkedIn
+content is not re-scraped after saving.
 X has a bounded public-embed adapter behind a disabled-by-default server flag,
 with guarded metadata fallback when it is off or the embed yields no text.
 Arbitrary HTTP(S) URLs use the general web-page boundary. That

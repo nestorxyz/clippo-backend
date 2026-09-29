@@ -42,6 +42,14 @@ const trimHostname = (hostname: string): string =>
 const isHostname = (hostname: string, domain: string): boolean =>
   hostname === domain || hostname.endsWith(`.${domain}`);
 
+export const isLinkedInPageUrl = (input: string): boolean => {
+  try {
+    return isHostname(trimHostname(new URL(input).hostname), 'linkedin.com');
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Classifies an HTTP(S) source URL without fetching it.
  *
@@ -140,6 +148,15 @@ export const describeSourceExtraction = (
       degraded: true,
       limitation:
         'This is a snapshot of public post text at save time; quotes, threads, and media were not analyzed',
+    };
+  }
+  if (source.kind === 'linkedin' && usedStrategy === 'web-page') {
+    return {
+      kind: source.kind,
+      usedStrategy,
+      degraded: true,
+      limitation:
+        'Only a public LinkedIn preview was saved; post completeness and media were not verified',
     };
   }
   if (source.kind === 'web-page' && usedStrategy === 'firecrawl') {

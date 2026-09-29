@@ -6,6 +6,7 @@ export interface LinkAnalysisState {
   error: string | null;
   registeredUrls: string[];
   verifiedContent: string | null;
+  contentScope?: 'partial-preview' | 'metadata-only';
 }
 
 export type ChatToolDirective =
@@ -36,7 +37,7 @@ export const recordLinkAnalysis = (
     success?: unknown;
     error?: unknown;
     content?: unknown;
-    sourceExtraction?: { usedStrategy?: unknown };
+    sourceExtraction?: { kind?: unknown; usedStrategy?: unknown };
   } | null;
   if (!analysis || analysis.success !== true) {
     return {
@@ -54,6 +55,10 @@ export const recordLinkAnalysis = (
     const source = classifySourceUrl(normalizeUserUrl(url));
     const strategy = analysis.sourceExtraction?.usedStrategy;
     const content = typeof analysis.content === 'string' ? analysis.content : '';
+    const linkedIn =
+      source.kind === 'linkedin' ||
+      analysis.sourceExtraction?.kind === 'linkedin';
+    const linkedInPage = linkedIn && strategy === 'web-page';
     return {
       analyzedUrl: source.normalizedUrl,
       error: null,
@@ -61,10 +66,17 @@ export const recordLinkAnalysis = (
       verifiedContent:
         source.kind === 'x' && strategy === 'x-oembed'
           ? content.slice(0, 500) || null
-          : source.kind === 'web-page' &&
-              (strategy === 'firecrawl' || strategy === 'web-page')
+          : linkedInPage ||
+              (source.kind === 'web-page' &&
+                (strategy === 'firecrawl' || strategy === 'web-page'))
             ? content.slice(0, 20_000) || null
             : null,
+      ...(linkedIn && (strategy === 'web-page' || strategy === 'url-only')
+        ? {
+            contentScope:
+              linkedInPage && content ? 'partial-preview' : 'metadata-only',
+          }
+        : {}),
     };
   } catch {
     return {
@@ -86,15 +98,26 @@ export const withVerifiedAnalyzedContent = <T extends { url?: unknown; content?:
   } catch {
     return args;
   }
-  if (source.kind !== 'x' && source.kind !== 'web-page') return args;
-
   // The model may omit or invent content. Save only extraction from the same
   // successfully analyzed URL, regardless of what it passes to register_link.
-  const { content: _modelContent, ...withoutModelContent } = args;
+  const {
+    contentScope: _modelContentScope,
+    ...withoutModelScope
+  } = args as T & { contentScope?: unknown };
+  if (
+    source.kind !== 'x' &&
+    source.kind !== 'web-page' &&
+    source.kind !== 'linkedin'
+  ) return withoutModelScope as T;
+
+  const { content: _modelContent, ...withoutModelContent } = withoutModelScope;
   return {
     ...withoutModelContent,
     ...(source.normalizedUrl === state.analyzedUrl && state.verifiedContent
       ? { content: state.verifiedContent }
+      : {}),
+    ...(source.normalizedUrl === state.analyzedUrl && state.contentScope
+      ? { contentScope: state.contentScope }
       : {}),
   } as T;
 };

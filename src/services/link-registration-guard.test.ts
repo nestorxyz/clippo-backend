@@ -207,6 +207,66 @@ test('does not persist model-invented X content after metadata-only analysis', (
   );
 });
 
+test('persists only the verified LinkedIn preview for short and direct URLs', () => {
+  for (const url of [
+    'https://lnkd.in/p/example',
+    'https://www.linkedin.com/posts/example_activity-123',
+  ]) {
+    const state = recordLinkAnalysis(url, {
+      success: true,
+      content: 'Author post text without sign-in UI',
+      sourceExtraction: { kind: 'linkedin', usedStrategy: 'web-page' },
+    });
+
+    assert.deepEqual(
+      withVerifiedAnalyzedContent(state, {
+        url,
+        content: 'Invented post text',
+        contentScope: 'complete',
+      }),
+      {
+        url,
+        content: 'Author post text without sign-in UI',
+        contentScope: 'partial-preview',
+      },
+    );
+  }
+});
+
+test('labels unavailable LinkedIn text as metadata-only without invented content', () => {
+  const url = 'https://www.linkedin.com/posts/example_activity-123';
+  const state = recordLinkAnalysis(url, {
+    success: true,
+    sourceExtraction: { kind: 'linkedin', usedStrategy: 'web-page' },
+  });
+
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, {
+      url,
+      content: 'Invented post text',
+      contentScope: 'complete',
+    }),
+    { url, contentScope: 'metadata-only' },
+  );
+});
+
+test('labels URL-only LinkedIn saves as metadata-only', () => {
+  const url = 'https://www.linkedin.com/posts/example_activity-123';
+  const state = recordLinkAnalysis(url, {
+    success: true,
+    sourceExtraction: { kind: 'linkedin', usedStrategy: 'url-only' },
+  });
+
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, {
+      url,
+      content: 'Invented post text',
+      contentScope: 'complete',
+    }),
+    { url, contentScope: 'metadata-only' },
+  );
+});
+
 test('saves extracted webpage text even when the model omits content', () => {
   for (const strategy of ['firecrawl', 'web-page']) {
     const state = recordLinkAnalysis('https://www.make.ad/#home', {
@@ -299,6 +359,7 @@ test('keeps video content handling outside the webpage save fix', () => {
     withVerifiedAnalyzedContent(state, {
       url: 'https://youtu.be/IBcBKgYUghU',
       content: 'Transcript passed by the video tool',
+      contentScope: 'partial-preview',
     }),
     {
       url: 'https://youtu.be/IBcBKgYUghU',

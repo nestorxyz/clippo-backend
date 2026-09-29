@@ -1,4 +1,4 @@
-import { describeSourceExtraction } from './source-url';
+import { describeSourceExtraction, isLinkedInPageUrl } from './source-url';
 import type { WebPageContent } from './web-page-content';
 
 export const toWebPageAnalysis = (
@@ -6,8 +6,9 @@ export const toWebPageAnalysis = (
   page: WebPageContent,
   focus?: string,
 ) => {
+  const linkedInPage = isLinkedInPageUrl(page.finalUrl);
   const sourceExtraction = describeSourceExtraction(
-    url,
+    linkedInPage ? page.finalUrl : url,
     page.provenance.method === 'firecrawl' ? 'firecrawl' : 'web-page',
   );
   const limitations = [
@@ -29,6 +30,12 @@ export const toWebPageAnalysis = (
     provenance: page.provenance,
     sourceExtraction,
     limitations,
+    ...(linkedInPage
+      ? {
+          platform: 'LinkedIn',
+          contentScope: page.text ? 'partial-preview' : 'metadata-only',
+        }
+      : {}),
     ...(page.text ? { content: page.text } : {}),
   };
 };

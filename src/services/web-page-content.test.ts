@@ -134,3 +134,40 @@ test('does not transmit credential-shaped URL parameters to Firecrawl', async ()
   assert.equal(result.provenance.method, 'server-html');
   assert.equal(firecrawlCalled, false);
 });
+
+test('never sends a LinkedIn short link or its redirected page to Firecrawl', async () => {
+  let firecrawlCalled = false;
+  const result = await extractWebPageContent('https://lnkd.in/p/example', {
+    native: {
+      resolveHostname: async () => [publicAddress],
+      requestResource: async (url) =>
+        url.hostname === 'lnkd.in'
+          ? {
+              statusCode: 302,
+              headers: {
+                location: 'https://www.linkedin.com/posts/example_activity-123',
+              },
+              body: Buffer.alloc(0),
+            }
+          : {
+              statusCode: 200,
+              headers: { 'content-type': 'text/html' },
+              body: Buffer.from(
+                '<meta property="og:description" content="The author post"><body>Sign in and read comments</body>',
+              ),
+            },
+    },
+    firecrawl: {
+      apiKey: 'test-key',
+      request: (async () => {
+        firecrawlCalled = true;
+        throw new Error('should not run');
+      }),
+    },
+    allowFirecrawl: true,
+  });
+
+  assert.equal(result.provenance.method, 'server-html');
+  assert.equal(result.text, 'The author post');
+  assert.equal(firecrawlCalled, false);
+});

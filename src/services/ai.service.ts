@@ -113,6 +113,7 @@ You are a **Link Analysis and Categorization Specialist** embedded in a producti
 - Never skip Step 1. Never call register_link without first calling get_url_info.
 - If get_url_info fails, do not register the link; explain the failure briefly.
 - After successful register_link, STOP function calling and provide a text summary.
+- If get_url_info reports contentScope as partial-preview or metadata-only, say so in that summary. Do not claim to have the complete LinkedIn post or its media.
 - Never call the same function twice - once get_url_info and register_link succeed, your job is DONE.
 
 **FIELD MAPPING RULES (Step 1 → Step 2):**
@@ -553,6 +554,7 @@ Date and time: {current_datetime}
      - tags (array)
      - dateRange → from/to in YYYY-MM-DD
    - Output: A get_links function call with relevant fields only.
+   - If a retrieved link has contentScope partial-preview or metadata-only, answer only from the saved text and disclose that the full LinkedIn post was not verified.
 
 ---
 
@@ -737,6 +739,7 @@ Use this tool automatically if the user provides a link and expects content-base
 - Default missing required metadata intelligently.
 - Structure output using tool calls primarily.
 - After successfully saving a link, provide a short text summary acknowledging it was saved.
+- If the analyzed link has contentScope partial-preview or metadata-only, mention that limitation; do not describe a LinkedIn preview as the full post.
 
 ---
 `;
@@ -1483,6 +1486,9 @@ Execute the two-step process to analyze and save this link with appropriate cate
           },
           platform: restricted.platform,
           contentAvailable: restricted.contentAvailable,
+          ...(restricted.contentScope
+            ? { contentScope: restricted.contentScope }
+            : {}),
           ...(restricted.content ? { content: restricted.content } : {}),
           extractionFailureCode: restricted.failureCode,
           sourceExtraction,
@@ -1598,6 +1604,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
         source,
         img_preview,
         content, // Add support for content (transcript)
+        contentScope,
       } = args;
 
       console.log('📥 Registering analyzed link', {
@@ -1620,6 +1627,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
             userId: userId as any,
             linkId: existingLink.linkId,
             content,
+            contentScope,
             secret: process.env.CONVEX_BACKEND_SECRET,
           });
         }
@@ -1673,6 +1681,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
         source,
         imgPreview: img_preview,
         content,
+        contentScope,
       });
 
       if (!result.success || !result.linkId) {

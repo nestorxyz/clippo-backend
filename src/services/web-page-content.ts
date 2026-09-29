@@ -12,6 +12,7 @@ import {
   PublicResourceError,
   type PublicResourceDependencies,
 } from './public-resource';
+import { isLinkedInPageUrl } from './source-url';
 
 export type WebPageContent = WebPageExtraction | FirecrawlExtraction;
 
@@ -41,6 +42,14 @@ const canUseFirecrawlAfter = (error: unknown): boolean =>
     error.code,
   );
 
+const isLinkedInShortLink = (input: string): boolean => {
+  try {
+    return new URL(input).hostname.toLowerCase() === 'lnkd.in';
+  } catch {
+    return false;
+  }
+};
+
 export const extractWebPageContent = async (
   input: string,
   dependencies: WebPageContentDependencies = {},
@@ -48,7 +57,9 @@ export const extractWebPageContent = async (
   const firecrawlConfigured =
     dependencies.allowFirecrawl === true &&
     hasFirecrawlConfiguration(dependencies.firecrawl?.apiKey) &&
-    !hasSensitiveUrlParameters(input);
+    !hasSensitiveUrlParameters(input) &&
+    !isLinkedInPageUrl(input) &&
+    !isLinkedInShortLink(input);
 
   let nativePage: WebPageExtraction;
   try {
@@ -60,7 +71,11 @@ export const extractWebPageContent = async (
     return extractWithFirecrawl(targetUrl.toString(), dependencies.firecrawl);
   }
 
-  if (!firecrawlConfigured || hasSensitiveUrlParameters(nativePage.finalUrl)) {
+  if (
+    !firecrawlConfigured ||
+    hasSensitiveUrlParameters(nativePage.finalUrl) ||
+    isLinkedInPageUrl(nativePage.finalUrl)
+  ) {
     return nativePage;
   }
 

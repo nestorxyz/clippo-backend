@@ -22,7 +22,9 @@ test('returns guarded webpage metadata while labeling specialized support', asyn
   assert.equal(result.platform, 'LinkedIn');
   assert.equal(result.usedStrategy, 'web-page');
   assert.equal(result.contentAvailable, true);
-  assert.match(result.limitation, /not implemented/);
+  assert.equal(result.content, 'Visible public post text.');
+  assert.equal(result.contentScope, 'partial-preview');
+  assert.match(result.limitation, /completeness/);
 });
 
 test('returns honest URL-only metadata when X blocks extraction', async () => {
@@ -142,6 +144,7 @@ test('uses a conservative LinkedIn title without inventing post content', async 
   assert.equal(result.title, 'LinkedIn post');
   assert.equal(result.imageUrl, null);
   assert.equal(result.failureCode, 'FETCH_FAILURE');
+  assert.equal(result.contentScope, 'metadata-only');
 });
 
 test('rejects sources outside LinkedIn and X', async () => {

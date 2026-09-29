@@ -1,5 +1,9 @@
 import { extractWebPage, type WebPageExtraction } from './web-page-extractor';
-import { classifySourceUrl, type SourceKind } from './source-url';
+import {
+  classifySourceUrl,
+  describeSourceExtraction,
+  type SourceKind,
+} from './source-url';
 import type { XEmbedExtraction } from './x-embed.service';
 
 type RestrictedSourceKind = Extract<SourceKind, 'linkedin' | 'x'>;
@@ -13,6 +17,7 @@ export interface RestrictedPlatformExtraction {
   summary: string;
   content: string | null;
   contentAvailable: boolean;
+  contentScope?: 'partial-preview' | 'metadata-only';
   usedStrategy: 'x-oembed' | 'web-page' | 'url-only';
   limitation: string;
   failureCode: string | null;
@@ -91,6 +96,7 @@ export const extractRestrictedPlatform = async (
   const extractPage = dependencies.extractPage ?? extractWebPage;
   try {
     const page = await extractPage(source.normalizedUrl);
+    const linkedInContent = source.kind === 'linkedin' ? page.text : '';
     return {
       kind: source.kind,
       platform,
@@ -98,10 +104,22 @@ export const extractRestrictedPlatform = async (
       description: page.description,
       imageUrl: page.imageUrl,
       summary: page.description || page.text.slice(0, 500),
-      content: null,
-      contentAvailable: true,
+      content: linkedInContent || null,
+      contentAvailable:
+        source.kind === 'linkedin' ? Boolean(linkedInContent) : true,
+      ...(source.kind === 'linkedin'
+        ? {
+            contentScope: linkedInContent
+              ? 'partial-preview'
+              : 'metadata-only',
+          }
+        : {}),
       usedStrategy: 'web-page',
-      limitation: `Specialized ${source.kind} extraction is not implemented`,
+      limitation:
+        source.kind === 'linkedin'
+          ? describeSourceExtraction(source.normalizedUrl, 'web-page')
+              .limitation ?? ''
+          : `Specialized ${source.kind} extraction is not implemented`,
       failureCode: null,
     };
   } catch (error) {
@@ -120,6 +138,9 @@ export const extractRestrictedPlatform = async (
       summary: limitation,
       content: null,
       contentAvailable: false,
+      ...(source.kind === 'linkedin'
+        ? { contentScope: 'metadata-only' }
+        : {}),
       usedStrategy: 'url-only',
       limitation,
       failureCode,

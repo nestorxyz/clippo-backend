@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { classifySourceUrl, describeSourceExtraction } from './source-url';
+import {
+  classifySourceUrl,
+  describeSourceExtraction,
+  isLinkedInPageUrl,
+} from './source-url';
 
 test('classifies the source types in the DoryAI roadmap', () => {
   const cases = [
@@ -42,6 +46,9 @@ test('does not accept lookalike social domains', () => {
     classifySourceUrl('https://x.com.example.org/post').kind,
     'web-page',
   );
+  assert.equal(isLinkedInPageUrl('https://linkedin.com.evil.example/post'), false);
+  assert.equal(isLinkedInPageUrl('https://www.linkedin.com/posts/example'), true);
+  assert.equal(isLinkedInPageUrl('https://lnkd.in/p/example'), false);
 });
 
 test('rejects relative and non-HTTP URLs', () => {
@@ -107,6 +114,16 @@ test('reports the extraction strategy that actually ran', () => {
       usedStrategy: 'web-page',
       degraded: true,
       limitation: 'Specialized x extraction is not implemented',
+    },
+  );
+  assert.deepEqual(
+    describeSourceExtraction('https://linkedin.com/posts/example', 'web-page'),
+    {
+      kind: 'linkedin',
+      usedStrategy: 'web-page',
+      degraded: true,
+      limitation:
+        'Only a public LinkedIn preview was saved; post completeness and media were not verified',
     },
   );
   assert.deepEqual(

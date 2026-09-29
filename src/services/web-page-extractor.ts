@@ -3,6 +3,7 @@ import {
   PublicResourceError,
   type PublicResourceDependencies,
 } from './public-resource';
+import { isLinkedInPageUrl } from './source-url';
 
 const MAX_BYTES = 1_000_000;
 const MAX_REDIRECTS = 3;
@@ -73,23 +74,29 @@ const extractMetadata = (html: string, finalUrl: URL) => {
     }
   }
 
-  const text = cleanText(
-    html
-      .replace(/<!--[\s\S]*?-->/g, ' ')
-      .replace(/<(script|style|noscript|svg)\b[\s\S]*?<\/\1>/gi, ' ')
-      .replace(/<[^>]+>/g, ' '),
-    MAX_TEXT_CHARS,
-  );
+  const rawDescription =
+    metadata.get('og:description') ||
+    metadata.get('twitter:description') ||
+    metadata.get('description') ||
+    '';
+  // LinkedIn's public HTML includes sign-in UI and comments around a post.
+  // Its description metadata is the bounded author-post preview, not page chrome.
+  const text = isLinkedInPageUrl(finalUrl.toString())
+    ? cleanText(rawDescription, MAX_TEXT_CHARS)
+    : cleanText(
+        html
+          .replace(/<!--[\s\S]*?-->/g, ' ')
+          .replace(/<(script|style|noscript|svg)\b[\s\S]*?<\/\1>/gi, ' ')
+          .replace(/<[^>]+>/g, ' '),
+        MAX_TEXT_CHARS,
+      );
 
   return {
     title: cleanText(
       metadata.get('og:title') || titleMatch?.[1] || finalUrl.hostname,
       300,
     ),
-    description: cleanText(
-      metadata.get('og:description') || metadata.get('description') || '',
-      1_000,
-    ),
+    description: cleanText(rawDescription, 1_000),
     imageUrl,
     text,
   };

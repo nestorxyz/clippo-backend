@@ -55,11 +55,13 @@ test('presents bounded results without internal user data', () => {
       ...records[0],
       userId: 'private-user-id',
       content: 'x'.repeat(2_001),
+      contentScope: 'partial-preview',
     },
   ]);
 
   assert.equal(result.contentExcerpt?.length, 2_000);
   assert.equal(result.contentTruncated, true);
+  assert.equal(result.contentScope, 'partial-preview');
   assert.equal('userId' in result, false);
 });
 

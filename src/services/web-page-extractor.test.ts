@@ -37,6 +37,49 @@ test('extracts normalized metadata and text from an HTML fixture', async () => {
   assert.equal(result.provenance.method, 'server-html');
 });
 
+test('uses the full public LinkedIn description without sign-in or comment text', async () => {
+  const postText = `A useful post about building products. ${'A concrete detail. '.repeat(70)}Final author sentence.`;
+  const result = await extractWebPage('https://lnkd.in/p/example', {
+    resolveHostname: resolvePublic,
+    requestResource: async (url) =>
+      url.hostname === 'lnkd.in'
+        ? {
+            statusCode: 302,
+            headers: {
+              location: 'https://www.linkedin.com/posts/example_activity-123',
+            },
+            body: Buffer.alloc(0),
+          }
+        : {
+            statusCode: 200,
+            headers: { 'content-type': 'text/html' },
+            body: Buffer.from(
+              `<title>Example post</title><meta property="og:description" content="${postText}"><body>Agree & Join LinkedIn ${postText} A comment by someone else</body>`,
+            ),
+          },
+  });
+
+  assert.equal(result.text, postText);
+  assert.equal(result.description.length, 1_000);
+  assert.match(result.text, /Final author sentence\.$/);
+  assert.doesNotMatch(result.text, /Agree & Join|A comment by/);
+});
+
+test('does not mistake LinkedIn sign-in chrome for post content', async () => {
+  const result = await extractWebPage('https://www.linkedin.com/posts/example', {
+    resolveHostname: resolvePublic,
+    requestResource: async () => ({
+      statusCode: 200,
+      headers: { 'content-type': 'text/html' },
+      body: Buffer.from(
+        '<title>Post | LinkedIn</title><body>Agree & Join LinkedIn Sign in to see the post</body>',
+      ),
+    }),
+  });
+
+  assert.equal(result.text, '');
+});
+
 test('rejects local, private, reserved, and nonstandard-port targets', async () => {
   const blockedInputs = [
     'http://127.0.0.1/admin',

@@ -80,6 +80,23 @@ test('does not mistake LinkedIn sign-in chrome for post content', async () => {
   assert.equal(result.text, '');
 });
 
+test('cleans nested HTML entities and LinkedIn comment-count suffixes', async () => {
+  const result = await extractWebPage('https://www.linkedin.com/posts/example', {
+    resolveHostname: resolvePublic,
+    requestResource: async () => ({
+      statusCode: 200,
+      headers: { 'content-type': 'text/html' },
+      body: Buffer.from(
+        '<meta property="og:title" content="Anthropic&amp;#39;s update"><meta property="og:description" content="Author&amp;#39;s actual post. | 22 comments on LinkedIn">',
+      ),
+    }),
+  });
+
+  assert.equal(result.title, "Anthropic's update");
+  assert.equal(result.text, "Author's actual post.");
+  assert.equal(result.description, "Author's actual post.");
+});
+
 test('rejects local, private, reserved, and nonstandard-port targets', async () => {
   const blockedInputs = [
     'http://127.0.0.1/admin',

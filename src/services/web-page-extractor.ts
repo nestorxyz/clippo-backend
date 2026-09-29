@@ -39,7 +39,7 @@ const decodeHtml = (value: string): string =>
     .replace(/&nbsp;/gi, ' ');
 
 const cleanText = (value: string, maxChars: number): string =>
-  decodeHtml(value).replace(/\s+/g, ' ').trim().slice(0, maxChars);
+  decodeHtml(decodeHtml(value)).replace(/\s+/g, ' ').trim().slice(0, maxChars);
 
 const readAttributes = (tag: string): Record<string, string> => {
   const attributes: Record<string, string> = {};
@@ -79,10 +79,14 @@ const extractMetadata = (html: string, finalUrl: URL) => {
     metadata.get('twitter:description') ||
     metadata.get('description') ||
     '';
+  const linkedInPage = isLinkedInPageUrl(finalUrl.toString());
   // LinkedIn's public HTML includes sign-in UI and comments around a post.
   // Its description metadata is the bounded author-post preview, not page chrome.
-  const text = isLinkedInPageUrl(finalUrl.toString())
-    ? cleanText(rawDescription, MAX_TEXT_CHARS)
+  const text = linkedInPage
+    ? cleanText(rawDescription, MAX_TEXT_CHARS).replace(
+        /\s*\|\s*\d[\d,.]*\s+comments? on LinkedIn$/i,
+        '',
+      )
     : cleanText(
         html
           .replace(/<!--[\s\S]*?-->/g, ' ')
@@ -96,7 +100,7 @@ const extractMetadata = (html: string, finalUrl: URL) => {
       metadata.get('og:title') || titleMatch?.[1] || finalUrl.hostname,
       300,
     ),
-    description: cleanText(rawDescription, 1_000),
+    description: cleanText(linkedInPage ? text : rawDescription, 1_000),
     imageUrl,
     text,
   };

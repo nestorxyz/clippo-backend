@@ -11,7 +11,7 @@ export interface LinkAnalysisState {
 
 export type ChatToolDirective =
   | { mode: 'auto' }
-  | { mode: 'tool'; name: 'get_url_info' | 'register_link' | 'get_links' }
+  | { mode: 'tool'; name: 'get_url_info' | 'register_link' | 'get_links' | 'get_link' }
   | { mode: 'text' };
 
 type GuardResult =
@@ -268,15 +268,26 @@ const refersToSavedLinks = (message: string): boolean =>
     message.normalize('NFD').replace(/\p{M}/gu, ''),
   );
 
+export const wantsSavedLinkDetail = (message: string): boolean =>
+  /\b(?:what (?:did|does|was)|tell me|summari[sz]e|explain|specific|content|que (?:dice|decia|decía)|de que trata|dime|resume|explica|contenido)\b/i.test(
+    message.normalize('NFD').replace(/\p{M}/gu, ''),
+  );
+
 export const selectChatToolDirective = (args: {
   message: string;
   linkAnalysis: LinkAnalysisState;
   registrationAttempted: boolean;
   retrievalCompleted: boolean;
+  retrievalHasResults?: boolean;
+  detailRead?: boolean;
 }): ChatToolDirective => {
+  if (args.retrievalCompleted) {
+    return args.retrievalHasResults && wantsSavedLinkDetail(args.message) && !args.detailRead
+      ? { mode: 'tool', name: 'get_link' }
+      : { mode: 'text' };
+  }
   if (
     args.registrationAttempted ||
-    args.retrievalCompleted ||
     args.linkAnalysis.error
   ) {
     return { mode: 'text' };

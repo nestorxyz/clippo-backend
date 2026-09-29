@@ -55,6 +55,19 @@
       "category": { "name": "work" },
       "subCategory": { "name": "engineering" },
       "tags": [{ "name": "video" }, { "name": "ingestion" }]
+    },
+    {
+      "_id": "linkedin-founder-preview",
+      "url": "https://linkedin.com/posts/example-founder",
+      "title": "A founder's reflection",
+      "description": "A short public preview about public success and private doubts.",
+      "content": "Salir en una revista mientras tu empresa lucha puede provocar síndrome del impostor.",
+      "contentScope": "partial-preview",
+      "source": "LinkedIn",
+      "createdAt": 1788728400000,
+      "category": { "name": "startups" },
+      "subCategory": { "name": "founders" },
+      "tags": [{ "name": "emprendimiento" }]
     }
   ],
   "cases": [
@@ -62,6 +75,9 @@
     { "name": "description match", "filters": { "stringQuery": "quick dinner parmesan" }, "expectedFirst": "pasta-recipe" },
     { "name": "taxonomy and tags", "filters": { "category": "personal", "subcategory": "travel", "tags": ["hiking"] }, "expectedFirst": "peru-hike" },
     { "name": "startup query", "filters": { "stringQuery": "startup fundraising traction" }, "expectedFirst": "fundraising-deck" },
-    { "name": "transcript match", "filters": { "stringQuery": "automatic captions language" }, "expectedFirst": "youtube-captions" }
+    { "name": "transcript match", "filters": { "stringQuery": "automatic captions language" }, "expectedFirst": "youtube-captions" },
+    { "name": "Spanish saved-preview detail", "filters": { "stringQuery": "síndrome impostor empresa" }, "expectedFirst": "linkedin-founder-preview" },
+    { "name": "exact URL tokens", "filters": { "stringQuery": "youtube captions fixture" }, "expectedFirst": "youtube-captions" },
+    { "name": "honest no-match", "filters": { "stringQuery": "volcanic gardening" }, "expectedFirst": null }
   ]
 }

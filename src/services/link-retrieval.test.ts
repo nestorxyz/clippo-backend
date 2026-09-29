@@ -5,6 +5,7 @@ import {
   coerceLinkRetrievalFilters,
   presentRetrievedLinks,
   retrieveLinks,
+  toIndexQuery,
   type LinkRetrievalFilters,
   type LinkRetrievalRecord,
 } from './link-retrieval';
@@ -17,13 +18,40 @@ for (const evaluationCase of evaluation.cases) {
       records,
       evaluationCase.filters as LinkRetrievalFilters,
     );
-    assert.equal(results[0]?._id, evaluationCase.expectedFirst);
+    assert.equal(results[0]?._id ?? null, evaluationCase.expectedFirst);
   });
 }
 
 test('uses recency as the deterministic tie-breaker', () => {
   const results = retrieveLinks(records, { category: 'work' });
   assert.equal(results[0]?._id, 'next-performance');
+});
+
+test('an older link remains rankable when the index returns it', () => {
+  const newer = Array.from({ length: 250 }, (_, index) => ({
+    _id: `newer-${index}`,
+    url: `https://example.test/newer-${index}`,
+    title: 'Generic saved link',
+    createdAt: 1789160400000 + index,
+  }));
+  const older = {
+    _id: 'older-link',
+    url: 'https://example.test/older',
+    title: 'Practical solar generator guide',
+    createdAt: 1780000000000,
+  };
+  const results = retrieveLinks([...newer, older], {
+    stringQuery: 'solar generator',
+  });
+  assert.equal(results[0]?._id, 'older-link');
+});
+
+test('normalizes accents and bounds indexed query terms', () => {
+  assert.equal(toIndexQuery('síndrome del impostor'), 'sindrome del impostor');
+  assert.equal(
+    toIndexQuery('a b c d e f g h i j k l m n'),
+    'a b c d e f g h i j k l',
+  );
 });
 
 test('applies inclusive UTC date filters', () => {

@@ -10,6 +10,8 @@ DoryAI is the current product name.
 
 The cross-repository runtime and trust-boundary map lives in
 `../web-app/docs/ARCHITECTURE.md` in the shared local workspace.
+The in-progress saved-link search design, backfill gate, and release checks
+live in `../web-app/docs/SEARCH.md`; this feature is not in production yet.
 
 ## Local setup
 

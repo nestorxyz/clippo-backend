@@ -55,6 +55,9 @@ const normalize = (value: string | undefined): string =>
 const tokenize = (value: string | undefined): string[] =>
   normalize(value).split(/\s+/).filter(Boolean);
 
+export const toIndexQuery = (value: string): string =>
+  tokenize(value).slice(0, 12).join(' ');
+
 const tagNames = (record: LinkRetrievalRecord): string[] =>
   (record.tags ?? [])
     .map((tag) => (typeof tag === 'string' ? tag : tag.name ?? ''))

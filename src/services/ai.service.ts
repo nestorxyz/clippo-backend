@@ -26,6 +26,7 @@ import {
   coerceLinkRetrievalFilters,
   presentRetrievedLinks,
   retrieveLinks,
+  toIndexQuery,
   type LinkRetrievalFilters,
   type LinkRetrievalRecord,
   type PresentedLinkRetrievalResult,
@@ -475,14 +476,14 @@ const tools: {
     {
       name: 'get_links',
       description:
-        'Retrieves saved links using lexical relevance plus category, subcategory, tag, and UTC date filters.',
+        'Searches this user\'s saved links. Only use category, subcategory, tags, or dateRange as hard filters when the user explicitly requests them.',
       parameters: {
         type: Type.OBJECT,
         properties: {
           stringQuery: {
             type: Type.STRING,
             description:
-              'Natural-language terms matched across title, description, saved content, source, URL, and taxonomy.',
+              'Topic words to search in saved title, description, content, source, and URL. Omit when the user only asks for a category, tag, or date filter.',
           },
           category: {
             type: Type.STRING,
@@ -511,6 +512,21 @@ const tools: {
             },
           },
         },
+      },
+    },
+    {
+      name: 'get_link',
+      description:
+        'Reads the stored content of one link ID returned by the immediately preceding get_links call. Use it before answering detailed questions about a saved link.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          linkId: {
+            type: Type.STRING,
+            description: 'Exact ID of a link returned by the preceding get_links call.',
+          },
+        },
+        required: ['linkId'],
       },
     },
   ],
@@ -547,14 +563,9 @@ Date and time: {current_datetime}
    - Follow the two-step "Saving a Link" workflow below.
 
 2. **Search Links**:
-   - Interpret user inputs like "show me links about startups from last week" and convert into filter parameters:
-     - stringQuery → searches title or description
-     - category
-     - subcategory
-     - tags (array)
-     - dateRange → from/to in YYYY-MM-DD
-   - Output: A get_links function call with relevant fields only.
-   - If a retrieved link has contentScope partial-preview or metadata-only, answer only from the saved text and disclose that the full LinkedIn post was not verified.
+   - Use get_links to find saved links across the user's library. Include a short stringQuery for a content topic; omit it when the user only names a category, tag, or date. Set category, subcategory, tags, or dates only when the user explicitly asked for that restriction.
+   - For a detailed question, call get_link with an ID from those results and answer from its stored content. Do not treat a title or excerpt as the full source.
+   - Cite the saved link URL. If contentScope is partial-preview or metadata-only, disclose that the full post was not verified. If the saved record lacks the requested detail, say so; do not recrawl the web or invent it.
 
 ---
 
@@ -701,7 +712,13 @@ _Note: These will be passed to you in system prompt each time dynamically. Alway
 }
 \`\`\`
 
-### 3. get_url_info
+### 3. get_link
+
+Read the saved content for one exact link ID returned by get_links. Use it to
+answer detailed questions, then cite that saved link's URL. If the content is
+partial or unavailable, explain that limitation instead of guessing.
+
+### 4. get_url_info
 
 \`\`\`json
 {
@@ -918,6 +935,9 @@ export class AIService {
       let linkAnalysis = emptyLinkAnalysisState();
       let registrationAttempted = false;
       let retrievalCompleted = false;
+      let retrievalHasResults = false;
+      let detailRead = false;
+      const retrievalCandidateIds = new Set<string>();
       let toolRounds = 0;
 
       // Process conversation with function calls
@@ -932,6 +952,8 @@ export class AIService {
           linkAnalysis,
           registrationAttempted,
           retrievalCompleted,
+          retrievalHasResults,
+          detailRead,
         });
         const functionCallingConfig =
           directive.mode === 'tool'
@@ -1009,12 +1031,17 @@ export class AIService {
                 filters,
                 20,
               );
+              for (const link of linksResult.data ?? []) {
+                if (link.id) retrievalCandidateIds.add(link.id);
+              }
+              retrievalHasResults = retrievalCandidateIds.size > 0;
               functionResponse = linksResult.success
                 ? {
                     links: linksResult.data,
                     retrieval: {
-                      strategy: 'lexical-v1',
-                      candidateWindow: 200,
+                      strategy: filters.stringQuery?.trim()
+                        ? 'tenant-full-text-v1'
+                        : 'tenant-filter-v1',
                       returned: linksResult.data?.length ?? 0,
                     },
                   }
@@ -1022,6 +1049,23 @@ export class AIService {
                     result: 'Search failed',
                     error: linksResult.error ?? 'Unknown retrieval failure',
                   };
+            } else if (fc.name === 'get_link') {
+              detailRead = true;
+              const linkId = fc.args?.linkId;
+              if (
+                typeof linkId !== 'string' ||
+                !retrievalCandidateIds.has(linkId)
+              ) {
+                functionResponse = {
+                  success: false,
+                  error: 'Select a link from the current search results.',
+                };
+              } else {
+                const link = await this.getSavedLinkContent(userId, linkId);
+                functionResponse = link
+                  ? { success: true, link }
+                  : { success: false, error: 'Saved link no longer available.' };
+              }
             } else if (fc.name === 'get_url_info') {
               const analysisUrl = findUserUrl(message) ?? fc.args?.url;
               functionResponse = await this.getUrlInfo(
@@ -1743,25 +1787,55 @@ Execute the two-step process to analyze and save this link with appropriate cate
   }
 
   /**
-   * Search a bounded recent candidate set using deterministic lexical ranking.
+   * Search the tenant's indexed links, or page metadata for filter-only queries.
    */
   async searchUserLinks(
     userId: string,
     filters: LinkRetrievalFilters,
     limit: number = 20,
   ): Promise<ServiceResponse<PresentedLinkRetrievalResult[]>> {
-    const candidates = await this.getUserRecentLinks(userId, 200);
-    if (!candidates.success) return candidates;
-
     try {
+      const queryText = filters.stringQuery?.trim();
+      let candidates: LinkRetrievalRecord[];
+      if (queryText) {
+        candidates = await convex.query(api.links.searchLinksForBackend, {
+          userId: userId as any,
+          queryText: toIndexQuery(queryText),
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        });
+      } else if (
+        filters.category ||
+        filters.subcategory ||
+        filters.tags?.length ||
+        filters.dateRange?.from ||
+        filters.dateRange?.to
+      ) {
+        candidates = [];
+        let cursor: string | undefined;
+        let isDone = false;
+        while (!isDone) {
+          const page = await convex.query(api.links.listLinkMetadataForBackend, {
+            userId: userId as any,
+            cursor,
+            secret: process.env.CONVEX_BACKEND_SECRET,
+          });
+          candidates.push(...page.links);
+          isDone = page.isDone;
+          if (!isDone && page.continueCursor === cursor) {
+            throw new Error('Link pagination did not advance');
+          }
+          cursor = page.continueCursor;
+        }
+      } else {
+        const recent = await this.getUserRecentLinks(userId, 20);
+        if (!recent.success) return recent;
+        candidates = (recent.data ?? []) as LinkRetrievalRecord[];
+      }
+
       return {
         success: true,
         data: presentRetrievedLinks(
-          retrieveLinks(
-            (candidates.data ?? []) as LinkRetrievalRecord[],
-            filters,
-            limit,
-          ),
+          retrieveLinks(candidates, filters, limit),
         ),
         message: 'Links retrieved successfully',
       };
@@ -1772,6 +1846,14 @@ Execute the two-step process to analyze and save this link with appropriate cate
         message: 'Failed to retrieve links',
       };
     }
+  }
+
+  async getSavedLinkContent(userId: string, linkId: string) {
+    return convex.query(api.links.getLinkContentForBackend, {
+      userId: userId as any,
+      linkId: linkId as any,
+      secret: process.env.CONVEX_BACKEND_SECRET,
+    });
   }
 
   /**

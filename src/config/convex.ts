@@ -20,6 +20,9 @@ export const api: any = {
     findLinkByUrlForBackend: 'links:findLinkByUrlForBackend',
     enrichLinkContentForBackend: 'links:enrichLinkContentForBackend',
     getRecentLinksForUser: 'links:getRecentLinksForUser',
+    searchLinksForBackend: 'links:searchLinksForBackend',
+    getLinkContentForBackend: 'links:getLinkContentForBackend',
+    listLinkMetadataForBackend: 'links:listLinkMetadataForBackend',
     updateLinkPreviewForBackend: 'links:updateLinkPreviewForBackend',
   },
   storage: {

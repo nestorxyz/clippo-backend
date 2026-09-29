@@ -8,6 +8,7 @@ import {
   recordLinkRegistration,
   selectChatToolDirective,
   withVerifiedAnalyzedContent,
+  wantsSavedLinkDetail,
 } from './link-registration-guard';
 
 test('allows the same normalized URL after successful analysis', () => {
@@ -432,6 +433,34 @@ test('forces a final text response after one retrieval', () => {
     }),
     { mode: 'text' },
   );
+});
+
+test('reads one selected saved link after a successful search', () => {
+  const common = {
+    message: 'What did my saved business video say?',
+    linkAnalysis: emptyLinkAnalysisState(),
+    registrationAttempted: false,
+    retrievalCompleted: true,
+    retrievalHasResults: true,
+  };
+  assert.deepEqual(selectChatToolDirective(common), {
+    mode: 'tool',
+    name: 'get_link',
+  });
+  assert.deepEqual(
+    selectChatToolDirective({ ...common, detailRead: true }),
+    { mode: 'text' },
+  );
+  assert.deepEqual(
+    selectChatToolDirective({ ...common, message: 'Find my saved startup links' }),
+    { mode: 'text' },
+  );
+});
+
+test('only requests an extra content read for detail questions', () => {
+  assert.equal(wantsSavedLinkDetail('Find my saved startup links'), false);
+  assert.equal(wantsSavedLinkDetail('What did my saved startup video say?'), true);
+  assert.equal(wantsSavedLinkDetail('¿Qué decía el enlace que guardé?'), true);
 });
 
 test('forces a final explanation after analysis or registration failure', () => {

@@ -11,7 +11,7 @@ import {
   recordLinkAnalysis,
   recordLinkRegistration,
   selectChatToolDirective,
-  withVerifiedXContent,
+  withVerifiedAnalyzedContent,
 } from './link-registration-guard';
 import { classifySourceUrl, describeSourceExtraction } from './source-url';
 import {
@@ -984,7 +984,7 @@ export class AIService {
               if (guard.allowed) {
                 functionResponse = await this.registerLink(
                   userId,
-                  withVerifiedXContent(linkAnalysis, {
+                  withVerifiedAnalyzedContent(linkAnalysis, {
                     ...(fc.args ?? {}),
                     url: guard.saveUrl,
                   }),
@@ -1205,7 +1205,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
               if (guard.allowed) {
                 functionResponse = await this.registerLink(
                   userId,
-                  withVerifiedXContent(linkAnalysis, {
+                  withVerifiedAnalyzedContent(linkAnalysis, {
                     ...(fc.args ?? {}),
                     url: guard.saveUrl,
                   }),
@@ -1254,7 +1254,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
         };
         linkResult = await this.registerLink(
           userId,
-          withVerifiedXContent(linkAnalysis, {
+          withVerifiedAnalyzedContent(linkAnalysis, {
             ...fallbackData,
             url: guard.saveUrl,
           }),

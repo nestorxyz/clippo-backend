@@ -7,7 +7,7 @@ import {
   recordLinkAnalysis,
   recordLinkRegistration,
   selectChatToolDirective,
-  withVerifiedXContent,
+  withVerifiedAnalyzedContent,
 } from './link-registration-guard';
 
 test('allows the same normalized URL after successful analysis', () => {
@@ -153,7 +153,7 @@ test('persists only verified X snippet for the analyzed URL', () => {
   });
 
   assert.deepEqual(
-    withVerifiedXContent(state, {
+    withVerifiedAnalyzedContent(state, {
       url: 'https://x.com/dory/status/123#reply',
       content: 'Invented post details',
       title: 'Business advice',
@@ -165,7 +165,7 @@ test('persists only verified X snippet for the analyzed URL', () => {
     },
   );
   assert.deepEqual(
-    withVerifiedXContent(state, {
+    withVerifiedAnalyzedContent(state, {
       url: 'https://x.com/dory/status/456',
       content: 'Invented post details',
     }),
@@ -179,11 +179,111 @@ test('does not persist model-invented X content after metadata-only analysis', (
     sourceExtraction: { usedStrategy: 'url-only' },
   });
   assert.deepEqual(
-    withVerifiedXContent(state, {
+    withVerifiedAnalyzedContent(state, {
       url: 'https://x.com/dory/status/123',
       content: 'Made up context',
     }),
     { url: 'https://x.com/dory/status/123' },
+  );
+});
+
+test('saves extracted webpage text even when the model omits content', () => {
+  for (const strategy of ['firecrawl', 'web-page']) {
+    const state = recordLinkAnalysis('https://www.make.ad/#home', {
+      success: true,
+      content: 'Verified page body and pricing details',
+      sourceExtraction: { usedStrategy: strategy },
+    });
+
+    assert.deepEqual(
+      withVerifiedAnalyzedContent(state, {
+        url: 'https://www.make.ad/',
+        title: 'Make Ad',
+      }),
+      {
+        url: 'https://www.make.ad/',
+        title: 'Make Ad',
+        content: 'Verified page body and pricing details',
+      },
+    );
+  }
+});
+
+test('replaces invented webpage content and never copies it to another URL', () => {
+  const state = recordLinkAnalysis('https://www.make.ad/', {
+    success: true,
+    content: 'Verified page body',
+    sourceExtraction: { usedStrategy: 'firecrawl' },
+  });
+
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, {
+      url: 'https://www.make.ad/',
+      content: 'Invented page body',
+    }),
+    { url: 'https://www.make.ad/', content: 'Verified page body' },
+  );
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, {
+      url: 'https://example.com/',
+      content: 'Invented page body',
+    }),
+    { url: 'https://example.com/' },
+  );
+});
+
+test('drops unverified webpage content when extraction returns no text', () => {
+  const state = recordLinkAnalysis('https://example.com/', {
+    success: true,
+    sourceExtraction: { usedStrategy: 'web-page' },
+  });
+
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, {
+      url: 'https://example.com/',
+      content: 'Invented page body',
+    }),
+    { url: 'https://example.com/' },
+  );
+});
+
+test('clears extracted page text before analyzing another URL', () => {
+  const first = recordLinkAnalysis('https://example.com/one', {
+    success: true,
+    content: 'First page body',
+    sourceExtraction: { usedStrategy: 'firecrawl' },
+  });
+  const second = recordLinkAnalysis(
+    'https://example.com/two',
+    { success: true, sourceExtraction: { usedStrategy: 'web-page' } },
+    first,
+  );
+
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(second, {
+      url: 'https://example.com/two',
+      content: 'Invented second page body',
+    }),
+    { url: 'https://example.com/two' },
+  );
+});
+
+test('keeps video content handling outside the webpage save fix', () => {
+  const state = recordLinkAnalysis('https://youtu.be/IBcBKgYUghU', {
+    success: true,
+    content: 'Video analysis',
+    sourceExtraction: { usedStrategy: 'youtube-gemini' },
+  });
+
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, {
+      url: 'https://youtu.be/IBcBKgYUghU',
+      content: 'Transcript passed by the video tool',
+    }),
+    {
+      url: 'https://youtu.be/IBcBKgYUghU',
+      content: 'Transcript passed by the video tool',
+    },
   );
 });
 

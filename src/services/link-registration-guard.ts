@@ -1,4 +1,5 @@
 import { classifySourceUrl } from './source-url';
+import { findUserUrl, normalizeUserUrl } from './user-url';
 
 export interface LinkAnalysisState {
   analyzedUrl: string | null;
@@ -50,7 +51,7 @@ export const recordLinkAnalysis = (
   }
 
   try {
-    const source = classifySourceUrl(String(url));
+    const source = classifySourceUrl(normalizeUserUrl(url));
     const strategy = analysis.sourceExtraction?.usedStrategy;
     const content = typeof analysis.content === 'string' ? analysis.content : '';
     return {
@@ -108,7 +109,7 @@ export const recordLinkRegistration = (
 
   try {
     const normalizedUrl = classifySourceUrl(
-      String(registrationUrl),
+      normalizeUserUrl(registrationUrl),
     ).normalizedUrl;
     return state.registeredUrls.includes(normalizedUrl)
       ? state
@@ -184,7 +185,7 @@ export const guardLinkRegistration = (
   let normalizedRegistrationUrl: string;
   try {
     normalizedRegistrationUrl = classifySourceUrl(
-      String(registrationUrl),
+      normalizeUserUrl(registrationUrl),
     ).normalizedUrl;
   } catch {
     return {
@@ -239,9 +240,6 @@ export const nextChatToolRound = (
   return completedRounds + 1;
 };
 
-const containsHttpUrl = (message: string): boolean =>
-  /(?:^|\s)https?:\/\/\S+/i.test(message);
-
 const refersToSavedLinks = (message: string): boolean =>
   /\b(?:saved|bookmarked|my links|my bookmarks|guarde|guardad[oa]s?|mis enlaces|mis links)\b/i.test(
     message.normalize('NFD').replace(/\p{M}/gu, ''),
@@ -265,7 +263,7 @@ export const selectChatToolDirective = (args: {
     return { mode: 'tool', name: 'register_link' };
   }
 
-  if (containsHttpUrl(args.message)) {
+  if (findUserUrl(args.message)) {
     return { mode: 'tool', name: 'get_url_info' };
   }
 

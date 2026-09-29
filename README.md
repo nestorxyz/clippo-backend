@@ -100,6 +100,13 @@ Firecrawl main-content markdown is preferred during the save when configured;
 the native text is the fallback, not a clean article extraction. A successful
 fixture or read-only extraction check is not a live save/readback.
 
+Chat and direct quick-save inputs also accept a public domain without a scheme
+(for example, `www.make.ad/path`). DoryAI adds `https://` before analysis and
+persists the resulting absolute URL. Explicit `http://` and `https://` are
+preserved; malformed domains, credentials in the authority, and other schemes
+are rejected. Production acceptance of this input form requires a separate
+authenticated save/readback after deployment.
+
 ## Security and publication
 
 - Requests to `/api/chat` must carry the shared backend secret and a valid

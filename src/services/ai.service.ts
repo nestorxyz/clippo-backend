@@ -14,6 +14,7 @@ import {
   withVerifiedAnalyzedContent,
 } from './link-registration-guard';
 import { classifySourceUrl, describeSourceExtraction } from './source-url';
+import { findUserUrl, normalizeUserUrl } from './user-url';
 import {
   extractYouTubeOEmbed,
   extractYouTubeWithGemini,
@@ -1019,12 +1020,13 @@ export class AIService {
                     error: linksResult.error ?? 'Unknown retrieval failure',
                   };
             } else if (fc.name === 'get_url_info') {
+              const analysisUrl = findUserUrl(message) ?? fc.args?.url;
               functionResponse = await this.getUrlInfo(
-                fc.args?.url as string,
+                analysisUrl as string,
                 fc.args?.focus as string,
               );
               linkAnalysis = recordLinkAnalysis(
-                fc.args?.url,
+                analysisUrl,
                 functionResponse,
                 linkAnalysis,
               );
@@ -1100,6 +1102,7 @@ export class AIService {
   ): Promise<ServiceResponse<QuickSaveLinkResponse>> {
     try {
       const { url, title, description, userId } = request;
+      const normalizedUrl = normalizeUserUrl(url);
 
       console.log('Direct link save request received', {
         hasProvidedTitle: Boolean(title),
@@ -1142,7 +1145,7 @@ export class AIService {
 
       // Create user message with context
       const userMessage = `Analyze and save this link:
-URL: ${url}
+URL: ${normalizedUrl}
 ${title ? `Provided Title: ${title}` : ''}
 ${description ? `Provided Description: ${description}` : ''}
 
@@ -1188,11 +1191,11 @@ Execute the two-step process to analyze and save this link with appropriate cate
             let functionResponse: any;
             if (fc.name === 'get_url_info') {
               urlInfo = await this.getUrlInfo(
-                fc.args?.url as string,
+                normalizedUrl,
                 fc.args?.focus as string,
               );
               linkAnalysis = recordLinkAnalysis(
-                fc.args?.url,
+                normalizedUrl,
                 urlInfo,
                 linkAnalysis,
               );
@@ -1235,14 +1238,14 @@ Execute the two-step process to analyze and save this link with appropriate cate
 
       // If AI didn't follow the two-step process, do fallback
       if (!urlInfo && !linkResult) {
-        urlInfo = await this.getUrlInfo(url);
-        linkAnalysis = recordLinkAnalysis(url, urlInfo, linkAnalysis);
-        const guard = guardLinkRegistration(linkAnalysis, url);
+        urlInfo = await this.getUrlInfo(normalizedUrl);
+        linkAnalysis = recordLinkAnalysis(normalizedUrl, urlInfo, linkAnalysis);
+        const guard = guardLinkRegistration(linkAnalysis, normalizedUrl);
         if (!guard.allowed) {
           throw new Error(`Failed to analyze link: ${guard.response.message}`);
         }
         const fallbackData = {
-          url,
+          url: normalizedUrl,
           title: title || urlInfo?.urlMetadata?.title || 'Saved Link',
           description:
             description || urlInfo?.summary || 'Link saved for later reference',
@@ -1262,7 +1265,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
       }
 
       if (!linkResult) {
-        const guard = guardLinkRegistration(linkAnalysis, url);
+        const guard = guardLinkRegistration(linkAnalysis, normalizedUrl);
         if (!guard.allowed) {
           throw new Error(`Failed to analyze link: ${guard.response.message}`);
         }
@@ -1303,8 +1306,9 @@ Execute the two-step process to analyze and save this link with appropriate cate
   /**
    * Analyze URL and get metadata (copied from edge function)
    */
-  private async getUrlInfo(url: string, focus?: string): Promise<any> {
+  private async getUrlInfo(input: string, focus?: string): Promise<any> {
     try {
+      const url = normalizeUserUrl(input);
       const classifiedSource = classifySourceUrl(url);
       if (
         classifiedSource.kind === 'youtube-video' ||

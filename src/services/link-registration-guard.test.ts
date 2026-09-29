@@ -21,6 +21,26 @@ test('allows the same normalized URL after successful analysis', () => {
   });
 });
 
+test('matches a schemeless registration URL to its HTTPS analysis', () => {
+  const state = recordLinkAnalysis('www.make.ad', { success: true });
+  assert.deepEqual(guardLinkRegistration(state, 'https://www.make.ad/'), {
+    allowed: true,
+    saveUrl: 'https://www.make.ad/',
+  });
+  assert.deepEqual(guardLinkRegistration(state, 'www.make.ad'), {
+    allowed: true,
+    saveUrl: 'https://www.make.ad/',
+  });
+  assert.deepEqual(guardLinkRegistration(state, 'make.ad'), {
+    allowed: false,
+    response: {
+      success: false,
+      error: 'URL_MISMATCH',
+      message: 'The saved URL must match the successfully analyzed URL',
+    },
+  });
+});
+
 test('saves the analyzed YouTube URL when the model rewrites the same video', () => {
   const analyzedUrl = 'https://youtu.be/IBcBKgYUghU?si=Vh3N_9Mvt5yPnW0i';
   const state = recordLinkAnalysis(analyzedUrl, { success: true });
@@ -325,6 +345,20 @@ test('forces the analyze-register-text sequence for URL messages', () => {
     }),
     { mode: 'text' },
   );
+});
+
+test('forces URL analysis for a bare public domain', () => {
+  for (const message of ['www.make.ad', 'guarda make.ad', 'save x.com/user/status/123']) {
+    assert.deepEqual(
+      selectChatToolDirective({
+        message,
+        linkAnalysis: emptyLinkAnalysisState(),
+        registrationAttempted: false,
+        retrievalCompleted: false,
+      }),
+      { mode: 'tool', name: 'get_url_info' },
+    );
+  }
 });
 
 test('forces a final text response after one retrieval', () => {

@@ -1798,11 +1798,36 @@ Execute the two-step process to analyze and save this link with appropriate cate
       const queryText = filters.stringQuery?.trim();
       let candidates: LinkRetrievalRecord[];
       if (queryText) {
+        const indexQuery = toIndexQuery(queryText);
         candidates = await convex.query(api.links.searchLinksForBackend, {
           userId: userId as any,
-          queryText: toIndexQuery(queryText),
+          queryText: indexQuery,
           secret: process.env.CONVEX_BACKEND_SECRET,
         });
+        let cursor: string | undefined;
+        let isDone = false;
+        let pages = 0;
+        while (!isDone) {
+          if (++pages > 50) {
+            throw new Error('Legacy link search exceeded its page limit');
+          }
+          const page = await convex.query(
+            api.links.searchUnindexedLinksForBackend,
+            {
+              userId: userId as any,
+              queryText: indexQuery,
+              cursor,
+              secret: process.env.CONVEX_BACKEND_SECRET,
+            },
+          );
+          candidates.push(...page.links);
+          isDone = page.isDone;
+          if (!isDone && page.continueCursor === cursor) {
+            throw new Error('Legacy link search pagination did not advance');
+          }
+          cursor = page.continueCursor;
+        }
+        candidates = [...new Map(candidates.map((link) => [link._id, link])).values()];
       } else if (
         filters.category ||
         filters.subcategory ||

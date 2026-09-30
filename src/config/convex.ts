@@ -21,6 +21,7 @@ export const api: any = {
     enrichLinkContentForBackend: 'links:enrichLinkContentForBackend',
     getRecentLinksForUser: 'links:getRecentLinksForUser',
     searchLinksForBackend: 'links:searchLinksForBackend',
+    searchUnindexedLinksForBackend: 'links:searchUnindexedLinksForBackend',
     getLinkContentForBackend: 'links:getLinkContentForBackend',
     listLinkMetadataForBackend: 'links:listLinkMetadataForBackend',
     updateLinkPreviewForBackend: 'links:updateLinkPreviewForBackend',

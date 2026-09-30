@@ -7,6 +7,7 @@ export interface LinkRetrievalRecord {
   url: string;
   title: string;
   description?: string;
+  imgPreview?: string;
   content?: string;
   contentScope?: 'partial-preview' | 'metadata-only';
   source?: string;
@@ -34,6 +35,7 @@ export interface PresentedLinkRetrievalResult {
   url: string;
   title: string;
   description?: string;
+  imgPreview?: string;
   contentExcerpt?: string;
   contentTruncated: boolean;
   contentScope?: 'partial-preview' | 'metadata-only';
@@ -207,6 +209,7 @@ export const presentRetrievedLinks = (
       url: record.url,
       title: record.title,
       description: record.description?.slice(0, 500),
+      imgPreview: record.imgPreview,
       contentExcerpt: content,
       contentTruncated: (record.content?.length ?? 0) > (content?.length ?? 0),
       contentScope: record.contentScope,

@@ -289,6 +289,57 @@ test('saves extracted webpage text even when the model omits content', () => {
   }
 });
 
+test('saves the analyzed preview image when the model omits or changes it', () => {
+  const url = 'https://youtube.com/shorts/H1e5BhMmmi0';
+  const state = recordLinkAnalysis(url, {
+    success: true,
+    urlMetadata: { image: 'https://i.ytimg.com/vi/H1e5BhMmmi0/hq2.jpg' },
+    sourceExtraction: { usedStrategy: 'youtube-metadata' },
+  });
+
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, { url, title: 'Video' }),
+    {
+      url,
+      title: 'Video',
+      img_preview: 'https://i.ytimg.com/vi/H1e5BhMmmi0/hq2.jpg',
+    },
+  );
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, {
+      url,
+      img_preview: 'https://unverified.example.com/other.jpg',
+    }),
+    {
+      url,
+      img_preview: 'https://i.ytimg.com/vi/H1e5BhMmmi0/hq2.jpg',
+    },
+  );
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, {
+      url: 'https://youtube.com/shorts/7WHnNjZcs_8',
+      img_preview: 'https://unverified.example.com/other.jpg',
+    }),
+    { url: 'https://youtube.com/shorts/7WHnNjZcs_8' },
+  );
+});
+
+test('does not carry an image from an earlier analysis or a blocked image URL', () => {
+  const first = recordLinkAnalysis('https://instagram.com/reel/one', {
+    success: true,
+    urlMetadata: { image: 'https://cdn.example.com/one.jpg' },
+  });
+  const second = recordLinkAnalysis('https://instagram.com/reel/two', {
+    success: true,
+    urlMetadata: { image: 'javascript:alert(1)' },
+  }, first);
+
+  assert.deepEqual(withVerifiedAnalyzedContent(second, {
+    url: 'https://instagram.com/reel/two',
+    img_preview: 'https://cdn.example.com/one.jpg',
+  }), { url: 'https://instagram.com/reel/two' });
+});
+
 test('replaces invented webpage content and never copies it to another URL', () => {
   const state = recordLinkAnalysis('https://www.make.ad/', {
     success: true,

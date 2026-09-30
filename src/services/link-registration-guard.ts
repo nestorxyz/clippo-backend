@@ -6,6 +6,7 @@ export interface LinkAnalysisState {
   error: string | null;
   registeredUrls: string[];
   verifiedContent: string | null;
+  verifiedImage: string | null;
   contentScope?: 'partial-preview' | 'metadata-only';
 }
 
@@ -26,7 +27,21 @@ export const emptyLinkAnalysisState = (): LinkAnalysisState => ({
   error: null,
   registeredUrls: [],
   verifiedContent: null,
+  verifiedImage: null,
 });
+
+const safeImageUrl = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'http:' || url.protocol === 'https:') &&
+      !url.username && !url.password
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+};
 
 export const recordLinkAnalysis = (
   url: unknown,
@@ -37,6 +52,7 @@ export const recordLinkAnalysis = (
     success?: unknown;
     error?: unknown;
     content?: unknown;
+    urlMetadata?: { image?: unknown };
     sourceExtraction?: { kind?: unknown; usedStrategy?: unknown };
   } | null;
   if (!analysis || analysis.success !== true) {
@@ -48,6 +64,7 @@ export const recordLinkAnalysis = (
           : 'URL analysis failed',
       registeredUrls: currentState.registeredUrls,
       verifiedContent: null,
+      verifiedImage: null,
     };
   }
 
@@ -71,6 +88,7 @@ export const recordLinkAnalysis = (
                 (strategy === 'firecrawl' || strategy === 'web-page'))
             ? content.slice(0, 20_000) || null
             : null,
+      verifiedImage: safeImageUrl(analysis.urlMetadata?.image),
       ...(linkedIn && (strategy === 'web-page' || strategy === 'url-only')
         ? {
             contentScope:
@@ -84,11 +102,12 @@ export const recordLinkAnalysis = (
       error: 'URL analysis returned an invalid URL',
       registeredUrls: currentState.registeredUrls,
       verifiedContent: null,
+      verifiedImage: null,
     };
   }
 };
 
-export const withVerifiedAnalyzedContent = <T extends { url?: unknown; content?: unknown }>(
+export const withVerifiedAnalyzedContent = <T extends { url?: unknown; content?: unknown; img_preview?: unknown }>(
   state: LinkAnalysisState,
   args: T,
 ): T => {
@@ -102,15 +121,22 @@ export const withVerifiedAnalyzedContent = <T extends { url?: unknown; content?:
   // successfully analyzed URL, regardless of what it passes to register_link.
   const {
     contentScope: _modelContentScope,
+    img_preview: _modelImage,
     ...withoutModelScope
   } = args as T & { contentScope?: unknown };
+  const withVerifiedImage = {
+    ...withoutModelScope,
+    ...(source.normalizedUrl === state.analyzedUrl && state.verifiedImage
+      ? { img_preview: state.verifiedImage }
+      : {}),
+  };
   if (
     source.kind !== 'x' &&
     source.kind !== 'web-page' &&
     source.kind !== 'linkedin'
-  ) return withoutModelScope as T;
+  ) return withVerifiedImage as T;
 
-  const { content: _modelContent, ...withoutModelContent } = withoutModelScope;
+  const { content: _modelContent, ...withoutModelContent } = withVerifiedImage;
   return {
     ...withoutModelContent,
     ...(source.normalizedUrl === state.analyzedUrl && state.verifiedContent

@@ -3,9 +3,11 @@ import test from 'node:test';
 import evaluation from '../fixtures/retrieval-evaluation.json';
 import {
   coerceLinkRetrievalFilters,
+  focusLinkSearchFilters,
   presentRetrievedLinks,
   retrieveLinks,
   toIndexQuery,
+  constrainFiltersToRequest,
   type LinkRetrievalFilters,
   type LinkRetrievalRecord,
 } from './link-retrieval';
@@ -44,6 +46,92 @@ test('an older link remains rankable when the index returns it', () => {
     stringQuery: 'solar generator',
   });
   assert.equal(results[0]?._id, 'older-link');
+});
+
+test('an explicit YouTube request focuses the topic and excludes unrelated sources', () => {
+  const filters = focusLinkSearchFilters(
+    constrainFiltersToRequest(
+      { stringQuery: 'find my saved YouTube business video' },
+      'Find the saved YouTube business video',
+    ),
+  );
+  assert.equal(filters.source, 'youtube');
+  assert.equal(filters.stringQuery, 'business');
+  const matches = retrieveLinks(
+    [
+      {
+        _id: 'linkedin',
+        url: 'https://linkedin.com/posts/business-video',
+        title: 'Business video advice',
+        source: 'LinkedIn',
+        createdAt: 3,
+      },
+      {
+        _id: 'youtube',
+        url: 'https://youtu.be/fixture',
+        title: 'If I started a business today',
+        createdAt: 1,
+      },
+    ],
+    filters,
+  );
+  assert.deepEqual(matches.map(({ _id }) => _id), ['youtube']);
+});
+
+test('a platform-only request becomes a source-only filter', () => {
+  const filters = focusLinkSearchFilters(
+    constrainFiltersToRequest(
+      { stringQuery: 'show my saved YouTube videos' },
+      'Show my saved YouTube videos',
+    ),
+  );
+  assert.equal(filters.stringQuery, undefined);
+  assert.equal(filters.source, 'youtube');
+});
+
+test('Spanish search phrasing retains the meaningful topic', () => {
+  const filters = focusLinkSearchFilters(
+    constrainFiltersToRequest(
+      { stringQuery: 'busca el video guardado de YouTube sobre negocios' },
+      'Busca el video guardado de YouTube sobre negocios',
+    ),
+  );
+  assert.equal(filters.source, 'youtube');
+  assert.equal(filters.stringQuery, 'negocios');
+});
+
+test('negated or multi-platform requests do not force YouTube', () => {
+  assert.equal(
+    constrainFiltersToRequest({}, 'Find the business post, not YouTube').source,
+    undefined,
+  );
+  assert.equal(
+    constrainFiltersToRequest({}, 'Compare YouTube and LinkedIn').source,
+    undefined,
+  );
+});
+
+test('model-inferred taxonomy cannot silently narrow a broad search', () => {
+  const filters = constrainFiltersToRequest(
+    {
+      stringQuery: 'business video',
+      category: 'startups',
+      subcategory: 'marketing',
+      tags: ['entrepreneurship'],
+    },
+    'Find the saved YouTube business video',
+  );
+  assert.equal(filters.source, 'youtube');
+  assert.equal(filters.category, undefined);
+  assert.equal(filters.subcategory, undefined);
+  assert.equal(filters.tags, undefined);
+  assert.equal(
+    constrainFiltersToRequest(
+      { category: 'work', tags: ['video'] },
+      'Find my work links tagged video',
+    ).category,
+    'work',
+  );
 });
 
 test('normalizes accents and bounds indexed query terms', () => {

@@ -21,6 +21,7 @@ export interface LinkRetrievalRecord {
 
 export interface LinkRetrievalFilters {
   stringQuery?: string;
+  source?: string;
   category?: string;
   subcategory?: string;
   tags?: string[];
@@ -59,6 +60,48 @@ const tokenize = (value: string | undefined): string[] =>
 
 export const toIndexQuery = (value: string): string =>
   tokenize(value).slice(0, 12).join(' ');
+
+const requestWords = new Set([
+  'a', 'about', 'an', 'and', 'busca', 'buscar', 'de', 'del', 'dime',
+  'el', 'en', 'enlace', 'enlaces', 'encuentra', 'find', 'for', 'from',
+  'guardado', 'guardados', 'i', 'la', 'link', 'links', 'me', 'mi',
+  'mis', 'muestrame', 'my', 'of', 'on', 'please', 'que', 'quiero',
+  'saved', 'show', 'sobre', 'that', 'the', 'this', 'to', 'un',
+  'una', 'what', 'which', 'with',
+]);
+
+export const constrainFiltersToRequest = (
+  filters: LinkRetrievalFilters,
+  userMessage: string,
+): LinkRetrievalFilters => {
+  const request = ` ${normalize(userMessage)} `;
+  const mentions = (value: string | undefined): boolean =>
+    !value || request.includes(` ${normalize(value)} `);
+  const explicitFilters: LinkRetrievalFilters = {
+    ...filters,
+    category: mentions(filters.category) ? filters.category : undefined,
+    subcategory: mentions(filters.subcategory) ? filters.subcategory : undefined,
+    tags: filters.tags?.every(mentions) ? filters.tags : undefined,
+  };
+  const mentionsYouTube = /\b(?:youtube|youtu\.be|yt)\b/i.test(userMessage);
+  const excludesYouTube = /\b(?:not|no|except|excluding)\s+(?:a\s+)?(?:youtube|yt)\b/i.test(userMessage);
+  const mentionsOtherSource = /\b(?:linkedin|instagram|tiktok|twitter|x\.com)\b/i.test(userMessage);
+  if (!mentionsYouTube || excludesYouTube || mentionsOtherSource) return explicitFilters;
+  return { ...explicitFilters, source: 'youtube' };
+};
+
+export const focusLinkSearchFilters = (
+  filters: LinkRetrievalFilters,
+): LinkRetrievalFilters => {
+  if (!filters.stringQuery) return filters;
+  const terms = tokenize(filters.stringQuery).filter(
+    (term) =>
+      !requestWords.has(term) &&
+      (filters.source !== 'youtube' ||
+        !['youtube', 'youtu', 'yt', 'video', 'videos'].includes(term)),
+  );
+  return { ...filters, stringQuery: terms.join(' ') || undefined };
+};
 
 const tagNames = (record: LinkRetrievalRecord): string[] =>
   (record.tags ?? [])
@@ -119,6 +162,12 @@ const matchesFilters = (
   record: LinkRetrievalRecord,
   filters: LinkRetrievalFilters,
 ): boolean => {
+  if (filters.source === 'youtube') {
+    const youtubeSource = normalize(record.source).startsWith('youtube');
+    const youtubeUrl = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com|youtu\.be)\//i.test(record.url);
+    if (!youtubeSource && !youtubeUrl) return false;
+  }
+
   const category = normalize(filters.category);
   if (category && normalize(record.category?.name) !== category) return false;
 

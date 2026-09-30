@@ -10,8 +10,13 @@ DoryAI is the current product name.
 
 The cross-repository runtime and trust-boundary map lives in
 `../web-app/docs/ARCHITECTURE.md` in the shared local workspace.
-The in-progress saved-link search design, backfill gate, and release checks
-live in `../web-app/docs/SEARCH.md`; this feature is not in production yet.
+Saved-link search V2 is in production without an existing-link backfill. The
+design, compatibility path, and remaining evaluation gates live in the DoryAI
+control-plane `projects/doryai/SEARCH-STRATEGY.md` and the web app's
+`docs/SEARCH.md`. Broad-query relevance is not yet accepted: this branch
+focuses conversational search terms and honors an explicitly requested YouTube
+source, but it still needs an authenticated Preview test and a >200-link corpus
+evaluation before release.
 
 ## Local setup
 

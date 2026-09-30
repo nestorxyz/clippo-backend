@@ -27,6 +27,8 @@ import {
   presentRetrievedLinks,
   retrieveLinks,
   toIndexQuery,
+  focusLinkSearchFilters,
+  constrainFiltersToRequest,
   type LinkRetrievalFilters,
   type LinkRetrievalRecord,
   type PresentedLinkRetrievalResult,
@@ -483,7 +485,7 @@ const tools: {
           stringQuery: {
             type: Type.STRING,
             description:
-              'Topic words to search in saved title, description, content, source, and URL. Omit when the user only asks for a category, tag, or date filter.',
+              'Use a few distinctive topic words, not the whole request. Omit words like find, saved, link, and video when they only describe the search action or source. Omit when the user only asks for a category, tag, or date filter.',
           },
           category: {
             type: Type.STRING,
@@ -563,7 +565,7 @@ Date and time: {current_datetime}
    - Follow the two-step "Saving a Link" workflow below.
 
 2. **Search Links**:
-   - Use get_links to find saved links across the user's library. Include a short stringQuery for a content topic; omit it when the user only names a category, tag, or date. Set category, subcategory, tags, or dates only when the user explicitly asked for that restriction.
+   - Use get_links to find saved links across the user's library. Include only distinctive content-topic words in stringQuery, not a paraphrase of the request or generic words like saved/link/video. Omit it when the user only names a category, tag, date, or source. Set category, subcategory, tags, or dates only when the user explicitly asked for that restriction.
    - For a detailed question, call get_link with an ID from those results and answer from its stored content. Do not treat a title or excerpt as the full source.
    - Cite the saved link URL. If contentScope is partial-preview or metadata-only, disclose that the full post was not verified. If the saved record lacks the requested detail, say so; do not recrawl the web or invent it.
 
@@ -1025,7 +1027,12 @@ export class AIService {
               }
             } else if (fc.name === 'get_links') {
               retrievalCompleted = true;
-              const filters = coerceLinkRetrievalFilters(fc.args);
+              const filters = focusLinkSearchFilters(
+                constrainFiltersToRequest(
+                  coerceLinkRetrievalFilters(fc.args),
+                  message,
+                ),
+              );
               const linksResult = await this.searchUserLinks(
                 userId,
                 filters,
@@ -1829,6 +1836,7 @@ Execute the two-step process to analyze and save this link with appropriate cate
         }
         candidates = [...new Map(candidates.map((link) => [link._id, link])).values()];
       } else if (
+        filters.source ||
         filters.category ||
         filters.subcategory ||
         filters.tags?.length ||

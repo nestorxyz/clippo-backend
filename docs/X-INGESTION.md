@@ -10,12 +10,12 @@ grounded chat retrieval passed; production authenticated save/readback has not
 yet been verified. This product choice conflicts with the current X Content
 compliance requirement described below. Deployment is not a compliance claim.
 
-Local follow-up on 2026-09-30: the oEmbed response for the owner's reported
+Release follow-up on 2026-09-30: the oEmbed response for the owner's reported
 post exposed text but no image field. A separate bounded public-page read found
-an Open Graph image for that same post. The unshipped backend branch now
+an Open Graph image for that same post. The backend release
 accepts only a same-post X media-CDN image as an optional preview; it does not
 analyze media, repair previously saved links, or resolve the X Content
-lifecycle policy risk. The existing thumbnail job would copy a new preview
+lifecycle policy risk. The existing thumbnail job copies a new preview
 into Convex storage after a successful new save.
 
 ## Product target

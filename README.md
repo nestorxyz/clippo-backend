@@ -56,7 +56,12 @@ Either path stores at most 20,000 characters of content.
 The X save path can read a bounded public-post text snapshot from X's
 oEmbed response when `X_SNAPSHOT_INGESTION_ENABLED=true` is set server-side;
 otherwise it keeps the guarded metadata fallback. It uses no paid X API. The
-flag is off by default in code. On 2026-09-27 it was enabled in Railway
+flag is off by default in code. The tested post's oEmbed response contained no
+preview image. On this branch, a successful text snapshot also makes a
+bounded best-effort read of the same public post's Open Graph image. Only
+media hosted on X's image CDN is accepted; failure leaves the text save
+intact. This is a preview image, not media analysis, and does not repair
+existing records. On 2026-09-27 the flag was enabled in Railway
 development and production; a development save, Convex record readback, and
 grounded chat retrieval passed. Authenticated production save/readback remains
 unverified. The chat flow can also store copies of the text, and there is no

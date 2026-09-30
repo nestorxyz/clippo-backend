@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PublicResourceError } from './public-resource';
 import { extractRestrictedPlatform } from './restricted-platform.service';
+import {
+  recordLinkAnalysis,
+  withVerifiedAnalyzedContent,
+} from './link-registration-guard';
 
 test('returns guarded webpage metadata while labeling specialized support', async () => {
   const result = await extractRestrictedPlatform(
@@ -69,7 +73,7 @@ test('does not activate raw X snippet storage from an environment switch', async
   }
 });
 
-test('uses a useful X embed snippet without claiming quoted or media content', async () => {
+test('keeps an X embed snippet when the optional media preview fetch fails', async () => {
   const result = await extractRestrictedPlatform(
     'https://x.com/dory/status/123',
     {
@@ -79,7 +83,7 @@ test('uses a useful X embed snippet without claiming quoted or media content', a
         snippet: 'Raise prices and advertise more to reach customers.',
       }),
       extractPage: async () => {
-        throw new Error('native page should not be fetched');
+        throw new Error('public page unavailable');
       },
     },
   );
@@ -87,8 +91,74 @@ test('uses a useful X embed snippet without claiming quoted or media content', a
   assert.equal(result.usedStrategy, 'x-oembed');
   assert.equal(result.contentAvailable, true);
   assert.equal(result.content, 'Raise prices and advertise more to reach customers.');
+  assert.equal(result.imageUrl, null);
   assert.match(result.title, /@dory/);
   assert.match(result.limitation, /media were not analyzed/);
+});
+
+test('saves media preview from the same X post alongside verified embed text', async () => {
+  const postUrl = 'https://x.com/dory/status/123?s=20';
+  const imageUrl = 'https://pbs.twimg.com/media/post123?format=webp&name=large';
+  const result = await extractRestrictedPlatform(postUrl, {
+    extractXPost: async () => ({
+      authorName: 'Dory AI',
+      handle: 'dory',
+      snippet: 'A useful post with a chart.',
+    }),
+    extractPage: async (requestedUrl) => {
+      assert.equal(requestedUrl, 'https://x.com/dory/status/123');
+      return {
+        requestedUrl,
+        finalUrl: requestedUrl,
+        title: 'X post',
+        description: '',
+        imageUrl,
+        text: 'Page text is not used for the X snapshot.',
+        provenance: { method: 'server-html', contentType: 'text/html' },
+      };
+    },
+  });
+
+  assert.equal(result.usedStrategy, 'x-oembed');
+  assert.equal(result.content, 'A useful post with a chart.');
+  assert.equal(result.imageUrl, imageUrl);
+  const state = recordLinkAnalysis(postUrl, {
+    success: true,
+    content: result.content,
+    urlMetadata: { image: result.imageUrl },
+    sourceExtraction: { kind: 'x', usedStrategy: result.usedStrategy },
+  });
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, { url: postUrl, img_preview: 'https://evil.example/fake.png' }),
+    { url: postUrl, img_preview: imageUrl, content: result.content },
+  );
+});
+
+test('ignores X images from a different post or a profile avatar', async () => {
+  for (const [finalUrl, imageUrl] of [
+    ['https://x.com/dory/status/456', 'https://pbs.twimg.com/media/other.jpg'],
+    ['https://x.com/dory/status/123', 'https://pbs.twimg.com/profile_images/avatar.jpg'],
+    ['https://x.com/dory/status/123', 'https://evil.example/media/fake.jpg'],
+  ]) {
+    const result = await extractRestrictedPlatform('https://x.com/dory/status/123', {
+      extractXPost: async () => ({
+        authorName: 'Dory AI',
+        handle: 'dory',
+        snippet: 'Verified text.',
+      }),
+      extractPage: async (requestedUrl) => ({
+        requestedUrl,
+        finalUrl,
+        title: 'X post',
+        description: '',
+        imageUrl,
+        text: '',
+        provenance: { method: 'server-html', contentType: 'text/html' },
+      }),
+    });
+    assert.equal(result.imageUrl, null);
+    assert.equal(result.content, 'Verified text.');
+  }
 });
 
 test('saves short X post text as returned by the embed', async () => {

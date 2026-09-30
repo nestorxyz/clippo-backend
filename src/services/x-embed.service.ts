@@ -56,6 +56,14 @@ const canonicalPost = (input: string): { url: string; handle: string | null; id:
   };
 };
 
+export const sameXPost = (first: string, second: string): boolean => {
+  try {
+    return canonicalPost(first).id === canonicalPost(second).id;
+  } catch {
+    return false;
+  }
+};
+
 export const extractXEmbed = async (
   input: string,
   dependencies: PublicResourceDependencies = {},

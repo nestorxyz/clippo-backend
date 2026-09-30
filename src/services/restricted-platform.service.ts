@@ -4,7 +4,7 @@ import {
   describeSourceExtraction,
   type SourceKind,
 } from './source-url';
-import type { XEmbedExtraction } from './x-embed.service';
+import { sameXPost, type XEmbedExtraction } from './x-embed.service';
 
 type RestrictedSourceKind = Extract<SourceKind, 'linkedin' | 'x'>;
 
@@ -58,6 +58,20 @@ const urlOnlyTitle = (url: URL, kind: RestrictedSourceKind): string => {
 const platformName = (kind: RestrictedSourceKind): 'LinkedIn' | 'X' =>
   kind === 'linkedin' ? 'LinkedIn' : 'X';
 
+const xPostMediaImage = (value: string | null): string | null => {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' &&
+      url.hostname === 'pbs.twimg.com' &&
+      /^\/(?:media|ext_tw_video_thumb|amplify_video_thumb)\//.test(url.pathname)
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+};
+
 export const extractRestrictedPlatform = async (
   input: string,
   dependencies: RestrictedPlatformDependencies = {},
@@ -68,17 +82,29 @@ export const extractRestrictedPlatform = async (
   }
 
   const platform = platformName(source.kind);
+  const extractPage = dependencies.extractPage ?? extractWebPage;
   if (source.kind === 'x' && dependencies.extractXPost !== undefined) {
     try {
       const post = await dependencies.extractXPost(source.normalizedUrl);
       if (post.snippet.trim()) {
         const author = post.handle ? `@${post.handle}` : post.authorName;
+        let imageUrl: string | null = null;
+        try {
+          const postUrl = new URL(source.normalizedUrl);
+          postUrl.search = '';
+          const page = await extractPage(postUrl.toString());
+          if (sameXPost(postUrl.toString(), page.finalUrl)) {
+            imageUrl = xPostMediaImage(page.imageUrl);
+          }
+        } catch {
+          // Media preview is optional; a blocked page must not discard text.
+        }
         return {
           kind: 'x',
           platform,
           title: `X post by ${author}: ${post.snippet.slice(0, 90)}`,
           description: post.snippet,
-          imageUrl: null,
+          imageUrl,
           summary: post.snippet,
           content: post.snippet,
           contentAvailable: true,
@@ -93,7 +119,6 @@ export const extractRestrictedPlatform = async (
     }
   }
 
-  const extractPage = dependencies.extractPage ?? extractWebPage;
   try {
     const page = await extractPage(source.normalizedUrl);
     const linkedInContent = source.kind === 'linkedin' ? page.text : '';

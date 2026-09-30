@@ -65,7 +65,7 @@ const extractMetadata = (html: string, finalUrl: URL) => {
   let imageUrl: string | null = null;
   if (rawImage) {
     try {
-      const parsedImage = new URL(rawImage, finalUrl);
+      const parsedImage = new URL(decodeHtml(rawImage), finalUrl);
       if (parsedImage.protocol === 'http:' || parsedImage.protocol === 'https:') {
         imageUrl = parsedImage.toString();
       }

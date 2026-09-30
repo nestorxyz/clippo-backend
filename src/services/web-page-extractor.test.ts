@@ -37,6 +37,24 @@ test('extracts normalized metadata and text from an HTML fixture', async () => {
   assert.equal(result.provenance.method, 'server-html');
 });
 
+test('decodes an HTML-escaped image URL before saving preview metadata', async () => {
+  const result = await extractWebPage('https://x.com/dory/status/123', {
+    resolveHostname: resolvePublic,
+    requestResource: async () => ({
+      statusCode: 200,
+      headers: { 'content-type': 'text/html' },
+      body: Buffer.from(
+        '<meta property="og:image" content="https://pbs.twimg.com/media/post123?format=webp&amp;name=large">',
+      ),
+    }),
+  });
+
+  assert.equal(
+    result.imageUrl,
+    'https://pbs.twimg.com/media/post123?format=webp&name=large',
+  );
+});
+
 test('uses the full public LinkedIn description without sign-in or comment text', async () => {
   const postText = `A useful post about building products. ${'A concrete detail. '.repeat(70)}Final author sentence.`;
   const result = await extractWebPage('https://lnkd.in/p/example', {

@@ -96,7 +96,10 @@ the video, the result is explicitly metadata-only. YouTube is never treated as
 a general webpage. Public LinkedIn posts use bounded preview text when it is
 available without sign-in. This is saved as a partial preview, not a full post;
 if no usable post text is available, the result is metadata-only. LinkedIn
-content is not re-scraped after saving.
+content is not re-scraped after saving. For new saves, a verified LinkedIn
+post redirect is stored as the direct post URL without share-tracking
+parameters; unverified or non-post redirects keep the submitted URL. This
+does not rewrite existing saved short links.
 X has a bounded public-embed adapter behind a disabled-by-default server flag,
 with guarded metadata fallback when it is off or the embed yields no text.
 Arbitrary HTTP(S) URLs use the general web-page boundary. That

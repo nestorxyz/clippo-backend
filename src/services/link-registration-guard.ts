@@ -3,6 +3,7 @@ import { findUserUrl, normalizeUserUrl } from './user-url';
 
 export interface LinkAnalysisState {
   analyzedUrl: string | null;
+  saveUrl: string | null;
   error: string | null;
   registeredUrls: string[];
   verifiedContent: string | null;
@@ -24,6 +25,7 @@ type GuardResult =
 
 export const emptyLinkAnalysisState = (): LinkAnalysisState => ({
   analyzedUrl: null,
+  saveUrl: null,
   error: null,
   registeredUrls: [],
   verifiedContent: null,
@@ -43,6 +45,34 @@ const safeImageUrl = (value: unknown): string | null => {
   }
 };
 
+const canonicalLinkedInPostUrl = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      !['linkedin.com', 'www.linkedin.com'].includes(
+        url.hostname.toLowerCase(),
+      ) ||
+      !(
+        /^\/posts\/[A-Za-z0-9_-]+\/?$/.test(url.pathname) ||
+        /^\/feed\/update\/urn:li:(?:activity|share):\d+\/?$/.test(url.pathname)
+      )
+    ) {
+      return null;
+    }
+
+    url.hostname = 'www.linkedin.com';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return null;
+  }
+};
+
 export const recordLinkAnalysis = (
   url: unknown,
   result: unknown,
@@ -51,6 +81,7 @@ export const recordLinkAnalysis = (
   const analysis = result as {
     success?: unknown;
     error?: unknown;
+    finalUrl?: unknown;
     content?: unknown;
     urlMetadata?: { image?: unknown };
     sourceExtraction?: { kind?: unknown; usedStrategy?: unknown };
@@ -58,6 +89,7 @@ export const recordLinkAnalysis = (
   if (!analysis || analysis.success !== true) {
     return {
       analyzedUrl: null,
+      saveUrl: null,
       error:
         typeof analysis?.error === 'string'
           ? analysis.error
@@ -76,8 +108,16 @@ export const recordLinkAnalysis = (
       source.kind === 'linkedin' ||
       analysis.sourceExtraction?.kind === 'linkedin';
     const linkedInPage = linkedIn && strategy === 'web-page';
+    // Only the extractor's verified redirect (or an already-direct input) can
+    // replace a short URL. Never trust a model-proposed post URL here.
+    const saveUrl =
+      (linkedInPage && canonicalLinkedInPostUrl(analysis.finalUrl)) ||
+      (source.kind === 'linkedin' &&
+        canonicalLinkedInPostUrl(source.normalizedUrl)) ||
+      source.normalizedUrl;
     return {
       analyzedUrl: source.normalizedUrl,
+      saveUrl,
       error: null,
       registeredUrls: currentState.registeredUrls,
       verifiedContent:
@@ -99,6 +139,7 @@ export const recordLinkAnalysis = (
   } catch {
     return {
       analyzedUrl: null,
+      saveUrl: null,
       error: 'URL analysis returned an invalid URL',
       registeredUrls: currentState.registeredUrls,
       verifiedContent: null,
@@ -124,9 +165,12 @@ export const withVerifiedAnalyzedContent = <T extends { url?: unknown; content?:
     img_preview: _modelImage,
     ...withoutModelScope
   } = args as T & { contentScope?: unknown };
+  const verifiedUrl =
+    source.normalizedUrl === state.analyzedUrl ||
+    source.normalizedUrl === state.saveUrl;
   const withVerifiedImage = {
     ...withoutModelScope,
-    ...(source.normalizedUrl === state.analyzedUrl && state.verifiedImage
+    ...(verifiedUrl && state.verifiedImage
       ? { img_preview: state.verifiedImage }
       : {}),
   };
@@ -139,10 +183,10 @@ export const withVerifiedAnalyzedContent = <T extends { url?: unknown; content?:
   const { content: _modelContent, ...withoutModelContent } = withVerifiedImage;
   return {
     ...withoutModelContent,
-    ...(source.normalizedUrl === state.analyzedUrl && state.verifiedContent
+    ...(verifiedUrl && state.verifiedContent
       ? { content: state.verifiedContent }
       : {}),
-    ...(source.normalizedUrl === state.analyzedUrl && state.contentScope
+    ...(verifiedUrl && state.contentScope
       ? { contentScope: state.contentScope }
       : {}),
   } as T;
@@ -247,9 +291,24 @@ export const guardLinkRegistration = (
     };
   }
 
+  const saveUrl = state.saveUrl ?? state.analyzedUrl;
+  if (
+    !matchesAnalyzedUrl(state.analyzedUrl, normalizedRegistrationUrl) &&
+    !matchesAnalyzedUrl(saveUrl, normalizedRegistrationUrl)
+  ) {
+    return {
+      allowed: false,
+      response: {
+        success: false,
+        error: 'URL_MISMATCH',
+        message: 'The saved URL must match the successfully analyzed URL',
+      },
+    };
+  }
+
   if (
     state.registeredUrls.some((registeredUrl) =>
-      matchesAnalyzedUrl(registeredUrl, normalizedRegistrationUrl),
+      matchesAnalyzedUrl(registeredUrl, saveUrl),
     )
   ) {
     return {
@@ -261,18 +320,7 @@ export const guardLinkRegistration = (
       },
     };
   }
-
-  if (!matchesAnalyzedUrl(state.analyzedUrl, normalizedRegistrationUrl)) {
-    return {
-      allowed: false,
-      response: {
-        success: false,
-        error: 'URL_MISMATCH',
-        message: 'The saved URL must match the successfully analyzed URL',
-      },
-    };
-  }
-  return { allowed: true, saveUrl: state.analyzedUrl };
+  return { allowed: true, saveUrl };
 };
 
 export const MAX_CHAT_TOOL_ROUNDS = 6;

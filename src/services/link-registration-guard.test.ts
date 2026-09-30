@@ -234,6 +234,91 @@ test('persists only the verified LinkedIn preview for short and direct URLs', ()
   }
 });
 
+test('saves a verified LinkedIn post URL instead of its short share URL', () => {
+  const shortUrl = 'https://lnkd.in/p/dz2-dPSZ';
+  const postUrl =
+    'https://www.linkedin.com/posts/alexander-remi_llm-aicomparsion-aitools-share-7510503490616647680-Yidh/';
+  const state = recordLinkAnalysis(shortUrl, {
+    success: true,
+    finalUrl: `${postUrl}?utm_source=share&rcm=personal-id`,
+    content: 'Verified public post preview',
+    urlMetadata: { image: 'https://media.licdn.com/post.jpg' },
+    sourceExtraction: { kind: 'linkedin', usedStrategy: 'web-page' },
+  });
+
+  for (const registrationUrl of [shortUrl, postUrl]) {
+    assert.deepEqual(guardLinkRegistration(state, registrationUrl), {
+      allowed: true,
+      saveUrl: postUrl,
+    });
+  }
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, {
+      url: postUrl,
+      content: 'Invented details',
+      contentScope: 'complete',
+    }),
+    {
+      url: postUrl,
+      content: 'Verified public post preview',
+      contentScope: 'partial-preview',
+      img_preview: 'https://media.licdn.com/post.jpg',
+    },
+  );
+
+  const registered = recordLinkRegistration(state, postUrl, { success: true });
+  const duplicate = guardLinkRegistration(registered, shortUrl);
+  assert.equal(duplicate.allowed, false);
+  if (!duplicate.allowed) {
+    assert.equal(duplicate.response.error, 'LINK_ALREADY_REGISTERED');
+  }
+});
+
+test('does not save an unverified or non-post LinkedIn redirect', () => {
+  const shortUrl = 'https://lnkd.in/p/example';
+  for (const finalUrl of [
+    'https://linkedin.com.evil.example/posts/fake',
+    'https://www.linkedin.com/in/someone/',
+    'https://www.linkedin.com/login',
+    'http://www.linkedin.com/posts/unsecured',
+  ]) {
+    const state = recordLinkAnalysis(shortUrl, {
+      success: true,
+      finalUrl,
+      sourceExtraction: { kind: 'linkedin', usedStrategy: 'web-page' },
+    });
+    assert.deepEqual(guardLinkRegistration(state, shortUrl), {
+      allowed: true,
+      saveUrl: shortUrl,
+    });
+    const changed = guardLinkRegistration(state, finalUrl);
+    assert.equal(changed.allowed, false);
+  }
+});
+
+test('removes share parameters from a directly analyzed LinkedIn post', () => {
+  const postUrl =
+    'https://www.linkedin.com/posts/person_topic-share-7510503490616647680-Yidh/';
+  const state = recordLinkAnalysis(
+    `${postUrl}?utm_medium=member_desktop&rcm=id`,
+    {
+      success: true,
+      sourceExtraction: { kind: 'linkedin', usedStrategy: 'url-only' },
+    },
+  );
+  assert.deepEqual(
+    guardLinkRegistration(state, `${postUrl}?utm_medium=member_desktop&rcm=id`),
+    { allowed: true, saveUrl: postUrl },
+  );
+  assert.deepEqual(
+    withVerifiedAnalyzedContent(state, {
+      url: postUrl,
+      content: 'Invented post content',
+    }),
+    { url: postUrl, contentScope: 'metadata-only' },
+  );
+});
+
 test('labels unavailable LinkedIn text as metadata-only without invented content', () => {
   const url = 'https://www.linkedin.com/posts/example_activity-123';
   const state = recordLinkAnalysis(url, {

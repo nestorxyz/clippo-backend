@@ -34,6 +34,7 @@ import {
   type PresentedLinkRetrievalResult,
 } from './link-retrieval';
 import { ServiceResponse } from '../types';
+import { savedLinkAnswerInstruction } from './saved-link-answer';
 
 import {
   FunctionCallingConfigMode,
@@ -803,9 +804,51 @@ export class AIService {
     sessionId: string;
     timeZone?: string;
     userId: string;
+    savedLinkId?: string;
   }): Promise<ServiceResponse<{ reply: string; functionCalls?: any[] }>> {
     try {
-      const { message, sessionId, timeZone = 'UTC', userId } = request;
+      const { message, sessionId, timeZone = 'UTC', userId, savedLinkId } = request;
+
+      // This path is only used by the post-save CTA. The Convex query enforces
+      // ownership before any chat message is written or model call is made.
+      const selectedLink = savedLinkId
+        ? await this.getSavedLinkContent(userId, savedLinkId)
+        : null;
+      if (savedLinkId && !selectedLink) {
+        return {
+          success: false,
+          error: 'Saved link no longer available.',
+          message: 'Could not answer from the selected saved link',
+        };
+      }
+
+      if (selectedLink) {
+        await convex.mutation(api.chat.saveMessage, {
+          sessionId: sessionId as any,
+          role: 'user',
+          parts: [{ text: message }],
+          contextLinkId: savedLinkId,
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        });
+        const result = await genAI.models.generateContent({
+          model: modelName,
+          contents: [{ role: 'user', parts: [{ text: message }] }],
+          config: { systemInstruction: savedLinkAnswerInstruction(selectedLink) },
+        });
+        const reply = result.text?.trim();
+        if (!reply) throw new Error('No answer returned for saved link');
+        await convex.mutation(api.chat.saveMessage, {
+          sessionId: sessionId as any,
+          role: 'model',
+          parts: [{ text: reply }],
+          secret: process.env.CONVEX_BACKEND_SECRET,
+        });
+        return {
+          success: true,
+          data: { reply, functionCalls: [] },
+          message: 'Saved link answered',
+        };
+      }
 
       // Get user's categories, subcategories, and tags using Convex
       const [categoriesData, subCategoriesData, tagsData] = await Promise.all([

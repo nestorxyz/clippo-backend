@@ -8,6 +8,7 @@ interface ChatRequest {
   message: string;
   sessionId: string;
   timeZone?: string;
+  savedLinkId?: string;
   userId?: string; // Added userId for service auth
 }
 
@@ -49,12 +50,18 @@ router.post(
   },
   async (req: AuthRequest, res: Response) => {
     try {
-      const { message, sessionId, timeZone } = req.body as ChatRequest;
+      const { message, sessionId, timeZone, savedLinkId } = req.body as ChatRequest;
 
       if (!message || !sessionId) {
         return res.status(400).json({
           error: 'Message and sessionId are required',
         });
+      }
+
+      if (savedLinkId !== undefined &&
+        (typeof savedLinkId !== 'string' ||
+          savedLinkId.length === 0 || savedLinkId.length > 128)) {
+        return res.status(400).json({ error: 'Invalid savedLinkId' });
       }
 
       const userId = req.user?.id;
@@ -68,6 +75,7 @@ router.post(
         message,
         sessionId,
         timeZone: timeZone || 'UTC',
+        savedLinkId,
         userId,
       });
 
